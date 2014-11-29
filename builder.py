@@ -14,6 +14,7 @@ class Builder:
         _create_build_methods()
         self.basic_block = None
         self.index = None
+        self.current_origin = None
 
     @property
     def position(self):
@@ -46,6 +47,9 @@ class Builder:
         self.basic_block.insert(self.index, insn)
         self.index += 1
 
+    def set_origin(self, origin):
+        self.current_origin = origin
+
 
 _build_method_created = False
 def _create_build_methods():
@@ -72,13 +76,15 @@ def _create_build_methods():
 
         def create_build_method(cls, name, kind):
 
-            def build(self, *operands):
+            def build(self, *operands, **kwargs):
+                if 'origin' not in kwargs:
+                    kwargs['origin'] = self.current_origin
                 func = self.basic_block.function
                 args = [func]
                 if len(cls.KINDS) > 1:
                     args.append(kind)
                 args.extend(operands)
-                insn = cls(*args)
+                insn = cls(*args, **kwargs)
                 self.insert_instruction(insn)
                 if insn.type != func.context.void_type:
                     return insn.as_value

@@ -96,11 +96,19 @@ class BasicBlock:
         assert False
 
     def format(self):
+        current_origin = None
         result = self.format_label() + [
             (Punctuation, ':'),
             (Text, '\n'),
         ]
         for insn in self.instructions:
+            if insn.origin != current_origin:
+                current_origin = insn.origin
+                result.extend([
+                    (Text, '    '),
+                    (Comment, '; {}'.format(current_origin)),
+                    (Text, '\n'),
+                ])
             result.append((Text, '    '))
             result.extend(insn.format())
             result.append((Text, '\n'))
@@ -211,9 +219,10 @@ class Register:
 
 class BaseInstruction:
 
-    def __init__(self, function, kind):
+    def __init__(self, function, kind, origin=None):
         self.function = function
         self.kind = kind
+        self.origin = origin
 
     @property
     def context(self):
@@ -336,8 +345,8 @@ NAMES = {
 class ControlFlowInstruction(BaseInstruction):
     KINDS = (JUMP, BRANCH, CALL, RET)
 
-    def __init__(self, function, kind, *operands):
-        super(ControlFlowInstruction, self).__init__(function, kind)
+    def __init__(self, function, kind, *operands, **kwargs):
+        super(ControlFlowInstruction, self).__init__(function, kind, **kwargs)
         assert kind in self.KINDS
 
         if kind == JUMP:
@@ -434,8 +443,8 @@ class ComputingInstruction(BaseInstruction):
 class PhiInstruction(ComputingInstruction):
     KINDS = (PHI, )
 
-    def __init__(self, function, pairs):
-        super(PhiInstruction, self).__init__(function, PHI)
+    def __init__(self, function, pairs, **kwargs):
+        super(PhiInstruction, self).__init__(function, PHI, **kwargs)
 
         self.pairs = pairs
         self.return_type = None
@@ -473,8 +482,8 @@ class PhiInstruction(ComputingInstruction):
 class ConversionInstruction(ComputingInstruction):
     KINDS = (ZEXT, SEXT, TRUNC, BITCAST)
 
-    def __init__(self, function, kind, dest_type, value):
-        super(ConversionInstruction, self).__init__(function, kind)
+    def __init__(self, function, kind, dest_type, value, **kwargs):
+        super(ConversionInstruction, self).__init__(function, kind, **kwargs)
 
         self.dest_type, self.value = dest_type, value
         if kind == BITCAST:
@@ -531,8 +540,8 @@ class BinaryInstruction(ComputingInstruction):
         XOR:   '^',
     }
 
-    def __init__(self, function, kind, left, right):
-        super(BinaryInstruction, self).__init__(function, kind)
+    def __init__(self, function, kind, left, right, **kwargs):
+        super(BinaryInstruction, self).__init__(function, kind, **kwargs)
         assert (
             kind in (LSHL, LSHR, ASHR)
             or (
@@ -564,8 +573,8 @@ class BinaryInstruction(ComputingInstruction):
 class ConcatenateInstruction(ComputingInstruction):
     KINDS = (CAT, )
 
-    def __init__(self, function, *operands):
-        super(ConcatenateInstruction, self).__init__(function, CAT)
+    def __init__(self, function, *operands, **kwargs):
+        super(ConcatenateInstruction, self).__init__(function, CAT, **kwargs)
         assert len(operands) > 0
         self.operands = operands
 
@@ -601,8 +610,8 @@ class ComparisonInstruction(ComputingInstruction):
         UGT: '>u',
     }
 
-    def __init__(self, function, kind, left, right):
-        super(ComparisonInstruction, self).__init__(function, kind)
+    def __init__(self, function, kind, left, right, **kwargs):
+        super(ComparisonInstruction, self).__init__(function, kind, **kwargs)
         assert kind in self.KINDS
         assert left.type == right.type
         self.left = left
@@ -627,8 +636,8 @@ class ComparisonInstruction(ComputingInstruction):
 class LoadInstruction(ComputingInstruction):
     KINDS = (LOAD, RLOAD)
 
-    def __init__(self, function, kind, source):
-        super(LoadInstruction, self).__init__(function, kind)
+    def __init__(self, function, kind, source, **kwargs):
+        super(LoadInstruction, self).__init__(function, kind, **kwargs)
         self.source = source
         if kind == LOAD:
             assert isinstance(source.type, PointerType)
@@ -661,8 +670,8 @@ class LoadInstruction(ComputingInstruction):
 class StoreInstruction(BaseInstruction):
     KINDS = (STORE, RSTORE)
 
-    def __init__(self, function, kind, destination, value):
-        super(StoreInstruction, self).__init__(function, kind)
+    def __init__(self, function, kind, destination, value, **kwargs):
+        super(StoreInstruction, self).__init__(function, kind, **kwargs)
         self.destination = destination
         self.value = value
         if kind == STORE:
@@ -706,8 +715,8 @@ class StoreInstruction(BaseInstruction):
 class UndefInstruction(BaseInstruction):
     KINDS = (UNDEF, )
 
-    def __init__(self, function):
-        super(UndefInstruction, self).__init__(function, UNDEF)
+    def __init__(self, function, **kwargs):
+        super(UndefInstruction, self).__init__(function, UNDEF, **kwargs)
 
     @property
     def type(self):

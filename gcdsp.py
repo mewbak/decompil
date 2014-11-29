@@ -311,6 +311,12 @@ class Decoder(disassemblers.BaseDecoder):
             ext = None
 
         insn = insn_pat(address, opcode, extra_operand, ext)
+        insn_image = '{}{}'.format(
+            insn.name,
+            "'{}".format(insn.extension.name) if insn.is_extended else ''
+        )
+        builder.set_origin('At {:#04x}: {}'.format(address, insn_image))
+
         # Always decode the extension first (if any).
         if insn.is_extended:
             insn.extension.decode(disassembler.context, disassembler, builder)
