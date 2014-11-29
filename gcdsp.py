@@ -100,9 +100,10 @@ class Context(ir.Context):
             Register(self, 'ax1', 32, [(regs[0x1b], 16), (regs[0x19], 0)]),
         ]
         self.prod_register = Register(self, 'prod', 40, [
-            (regs[0x14], 32),
-            (regs[0x15], 16), (regs[0x17], 16),
-            (regs[0x16], 16),
+            (regs[0x17], 16),
+            (regs[0x16], 32),
+            (regs[0x15], 16),
+            (regs[0x14], 0),
         ])
 
 

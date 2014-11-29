@@ -484,7 +484,7 @@ class MULCMV(Instruction):
         acm_val = acm_reg.build_load(bld)
         axh_val = axh_reg.build_load(bld)
         prod_old_values = ctx.prod_register.build_load_comp(bld)
-        prod_old_values.pop(2)
+        prod_old_values.pop(0)
 
         prod_new_val = build_multiply(ctx, disas, bld, acm_val, axh_val)
         build_store_prod(ctx, disas, bld, prod_new_val)
