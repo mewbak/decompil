@@ -80,9 +80,35 @@ class BasicBlock:
     def __init__(self, function):
         self.function = function
         self.instructions = []
+        self.predecessors = set()
 
     def insert(self, index, insn):
         self.instructions.insert(index, insn)
+        for succ in self.get_successors(True):
+            succ.add_predecessor(self)
+
+    @property
+    def successors(self):
+        self.get_successors(False)
+
+    def get_successors(self, allow_incomplete):
+        if len(self.instructions) == 0:
+            assert allow_incomplete
+            return []
+
+        last_insn = self.instructions[-1]
+        if last_insn.kind == JUMP:
+            return [last_insn.destination]
+        elif last_insn.kind == BRANCH:
+            return [last_insn.dest_true, last_insn.dest_false]
+        elif last_insn.kind in (RET, UNDEF):
+            return []
+        else:
+            assert allow_incomplete
+            return []
+
+    def add_predecessor(self, bb):
+        self.predecessors.add(bb)
 
     @property
     def context(self):
@@ -96,20 +122,31 @@ class BasicBlock:
         assert False
 
     def format(self):
-        current_origin = None
+        indentation = (Text, '    ')
+
         result = self.format_label() + [
             (Punctuation, ':'),
-            (Text, '\n'),
+            (Text, '\n')
         ]
+        if self.predecessors:
+            result.extend([
+                indentation,
+                (Comment, '; Predecessors: {}'.format(', '.join(sorted(
+                    pred.name for pred in self.predecessors
+                )))),
+                (Text, '\n'),
+            ])
+
+        current_origin = None
         for insn in self.instructions:
             if insn.origin != current_origin:
                 current_origin = insn.origin
                 result.extend([
-                    (Text, '    '),
+                    indentation,
                     (Comment, '; {}'.format(current_origin)),
                     (Text, '\n'),
                 ])
-            result.append((Text, '    '))
+            result.append(indentation)
             result.extend(insn.format())
             result.append((Text, '\n'))
         return result
