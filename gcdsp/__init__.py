@@ -4,12 +4,12 @@ import struct
 
 from pygments.token import *
 
-import builder
-import disassemblers
-import ir
+import decompil.builder
+import decompil.disassemblers
+import decompil.ir
 
 
-class Context(ir.Context):
+class Context(decompil.ir.Context):
 
     def __init__(self):
         super(Context, self).__init__(16)
@@ -107,7 +107,7 @@ class Context(ir.Context):
         ])
 
 
-class Register(ir.Register):
+class Register(decompil.ir.Register):
     def __init__(self, context, name, width, components=None):
         self.context = context
         self.type = context.create_int_type(width)
@@ -210,11 +210,11 @@ class InstructionExtension(BaseDecoder):
 instructions = []
 instruction_extensions = []
 def _init_tables():
-    import gcdsp_decoders
+    import gcdsp.decoders
 
     def helper(table, cls):
-        for obj_name in dir(gcdsp_decoders):
-            obj = getattr(gcdsp_decoders, obj_name)
+        for obj_name in dir(gcdsp.decoders):
+            obj = getattr(gcdsp.decoders, obj_name)
             if not (
                 inspect.isclass(obj)
                 and issubclass(obj, cls)
@@ -230,7 +230,7 @@ _init_tables()
 
 
 def load_insns():
-    import gcdsp_decoders
+    import gcdsp.decoders
 
     def default_decoder(self, context, disassembler, builder):
         builder.build_undef()
@@ -247,10 +247,10 @@ def load_insns():
         'Insn', 'name opcode mask size unused0 operands is_extended unused1'
     )
 
-    for insn in gcdsp_decoders.opcodes:
+    for insn in gcdsp.decoders.opcodes:
         insn = Insn(*insn)
         insn_decoder = getattr(
-            gcdsp_decoders,
+            gcdsp.decoders,
             'decode_{}'.format(insn.name.lower()),
             default_decoder,
         )
@@ -267,7 +267,7 @@ def load_insns():
             })
         )
 
-    for ext in gcdsp_decoders.opcodes_ext:
+    for ext in gcdsp.decoders.opcodes_ext:
         ext = Insn(*ext)
         instruction_extensions.append(
             type(ext.name, (InstructionExtension, ), {
@@ -282,7 +282,7 @@ def load_insns():
 load_insns()
 
 
-class Decoder(disassemblers.BaseDecoder):
+class Decoder(decompil.disassemblers.BaseDecoder):
 
     def __init__(self, fp):
         self.fp = fp

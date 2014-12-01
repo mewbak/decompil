@@ -1,4 +1,4 @@
-import builder
+import decompil.builder
 
 
 class BaseDecoder:
@@ -43,7 +43,7 @@ class EntryDisassembler(BaseDisassembler):
         self.pending_basic_blocks = [(address, function.entry)]
         self.processed_basic_blocks = set()
 
-        bld = builder.Builder()
+        bld = decompil.builder.Builder()
 
         while self.pending_basic_blocks:
             bb_addr, bb = self.pending_basic_blocks.pop(0)

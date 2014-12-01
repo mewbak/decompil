@@ -3,8 +3,8 @@ import sys
 import pygments
 from pygments.formatters import get_formatter_by_name
 
-import builder
-from disassemblers import EntryDisassembler
+import decompil.builder
+from decompil.disassemblers import EntryDisassembler
 import gcdsp
 
 

@@ -1,6 +1,6 @@
 import inspect
 
-import ir
+import decompil.ir
 
 
 class Builder:
@@ -61,17 +61,17 @@ def _create_build_methods():
         _build_method_created = True
 
     kind_to_cls = {}
-    for names in dir(ir):
-        obj = getattr(ir, names)
+    for names in dir(decompil.ir):
+        obj = getattr(decompil.ir, names)
         if (
             inspect.isclass(obj)
-            and issubclass(obj, ir.BaseInstruction)
-            and obj != ir.BaseInstruction
+            and issubclass(obj, decompil.ir.BaseInstruction)
+            and obj != decompil.ir.BaseInstruction
         ):
             for kind in obj.KINDS:
                 kind_to_cls[kind] = obj
 
-    for kind, name in ir.NAMES.items():
+    for kind, name in decompil.ir.NAMES.items():
         cls = kind_to_cls[kind]
 
         def create_build_method(cls, name, kind):
