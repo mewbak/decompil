@@ -3,7 +3,7 @@ import functools
 import nose.tools
 from pygments.token import *
 
-from decompil import builder, ir
+from decompil import builder, interpreter, ir
 
 
 class Register(ir.Register):
@@ -41,3 +41,16 @@ def standard_testcase(func):
         bld.position_at_end(func_obj.entry)
         return func(ctx, func_obj, bld)
     return wrapper
+
+
+def run_before_and_after_optimization(func, optimization, regs, expected_regs):
+    for run_opt in (False, True):
+        if run_opt:
+            optimization.process_function(func)
+        import decompil.utils
+        print(decompil.utils.format_to_str(func))
+
+        regs_copy = dict(regs)
+        interpreter.run(func, regs_copy)
+        for reg, value in expected_regs.items():
+            assert regs_copy[reg] == value

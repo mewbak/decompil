@@ -5,6 +5,7 @@ from pygments.formatters import get_formatter_by_name
 
 import decompil.builder
 from decompil.disassemblers import EntryDisassembler
+from decompil.optimizations import registers_to_ssa
 import gcdsp
 
 
@@ -30,5 +31,13 @@ with open(sys.argv[1], 'rb') as fp:
     # func = context.create_function(first)
     # bld = builder.Builder()
     # bld.position_at_entry(func)
+
+opt_pipeline = [
+    registers_to_ssa.RegistersToSSA,
+]
+
+for func in context.functions.values():
+    for opt in opt_pipeline:
+        opt.process_function(func)
 
 print(pygments.format(context.format(), formatter))
