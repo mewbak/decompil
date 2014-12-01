@@ -91,7 +91,7 @@ class BasicBlock:
 
     @property
     def successors(self):
-        self.get_successors(False)
+        return self.get_successors(False)
 
     def get_successors(self, allow_incomplete):
         if len(self.instructions) == 0:
