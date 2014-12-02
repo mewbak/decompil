@@ -129,6 +129,9 @@ class BasicBlock:
                 return '%bb_{}'.format(i)
         assert False
 
+    def __repr__(self):
+        return '<BasicBlock {}>'.format(self.name)
+
     def format(self):
         indentation = (Text, '    ')
 
