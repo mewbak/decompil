@@ -3,12 +3,13 @@ import inspect
 import decompil.ir
 
 
-class Builder:
+class Position:
+    def __init__(self, basic_block, index):
+        self.basic_bloc = basic_block
+        self.index = index
 
-    class Position:
-        def __init__(self, basic_block, index):
-            self.basic_bloc = basic_block
-            self.index = index
+
+class Builder:
 
     def __init__(self):
         _create_build_methods()
@@ -19,7 +20,7 @@ class Builder:
     @property
     def position(self):
         if self.basic_block:
-            return self.Position(self.basic_block, self.index)
+            return Position(self.basic_block, self.index)
         else:
             return None
 
