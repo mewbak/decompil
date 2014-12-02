@@ -170,3 +170,29 @@ def get_dominator_tree(func):
             imm_dominators[basic_block] = imm_dominators[same_dom]
 
     return parent_links_to_tree(imm_dominators)
+
+
+def get_dominance_frontiers(func):
+    """Return a mapping: basic_block -> dominance frontier."""
+    # Implementation is based on Modern Compiler Implementation, Andew W.
+    # Appel, Chapter 19 Static Single-Assignment Form.
+
+    result = {}
+    dom_tree = get_dominator_tree(func)
+
+    def process_node(basic_block):
+        df = set()
+        # First compute DF_local[basic_block].
+        for bb in basic_block.successors:
+            if dom_tree.get_parent(bb) != basic_block:
+                df.add(bb)
+        for bb in dom_tree.get_children(basic_block):
+            process_node(bb)
+            # Compute DF_up[bb].
+            for bb_front in result[bb]:
+                if not dom_tree.is_ancestor(bb_front, basic_block):
+                    df.add(bb_front)
+        result[basic_block] = df
+
+    process_node(func.entry)
+    return dom_tree, result

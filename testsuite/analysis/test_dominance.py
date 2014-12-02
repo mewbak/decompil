@@ -54,8 +54,13 @@ def standard_testcase(func):
 def test_dominance_single(ctx, func, bld):
     bld.build_ret()
 
-    rev_dom_tree = tree_to_nodes(dominance.get_dominator_tree(func))
+    dom_tree, dom_frontiers = dominance.get_dominance_frontiers(func)
+    rev_dom_tree = tree_to_nodes(dom_tree)
     assert rev_dom_tree == Node(func.entry, {})
+
+    assert dom_frontiers == {
+        func.entry: set(),
+    }
 
 
 @standard_testcase
@@ -66,10 +71,16 @@ def test_dominance_chained_1(ctx, func, bld):
     bld.position_at_end(bb)
     bld.build_ret()
 
-    rev_dom_tree = tree_to_nodes(dominance.get_dominator_tree(func))
+    dom_tree, dom_frontiers = dominance.get_dominance_frontiers(func)
+    rev_dom_tree = tree_to_nodes(dom_tree)
     assert rev_dom_tree == Node(func.entry, {
         bb: Node(bb, {}),
     })
+
+    assert dom_frontiers == {
+        func.entry: set(),
+        bb: set(),
+    }
 
 
 @standard_testcase
@@ -84,12 +95,19 @@ def test_dominance_chained_2(ctx, func, bld):
     bld.position_at_end(bb_B)
     bld.build_ret()
 
-    rev_dom_tree = tree_to_nodes(dominance.get_dominator_tree(func))
+    dom_tree, dom_frontiers = dominance.get_dominance_frontiers(func)
+    rev_dom_tree = tree_to_nodes(dom_tree)
     assert rev_dom_tree == Node(func.entry, {
         bb_A: Node(bb_A, {
             bb_B: Node(bb_B, {}),
         }),
     })
+
+    assert dom_frontiers == {
+        func.entry: set(),
+        bb_A: set(),
+        bb_B: set(),
+    }
 
 
 @standard_testcase
@@ -112,12 +130,20 @@ def test_dominance_diamond(ctx, func, bld):
     bld.position_at_end(bb_C)
     bld.build_ret()
 
-    rev_dom_tree = tree_to_nodes(dominance.get_dominator_tree(func))
+    dom_tree, dom_frontiers = dominance.get_dominance_frontiers(func)
+    rev_dom_tree = tree_to_nodes(dom_tree)
     assert rev_dom_tree == Node(func.entry, {
         bb_A: Node(bb_A, {}),
         bb_B: Node(bb_B, {}),
         bb_C: Node(bb_C, {}),
     })
+
+    assert dom_frontiers == {
+        func.entry: set(),
+        bb_A: {bb_C},
+        bb_B: {bb_C},
+        bb_C: set(),
+    }
 
 
 @standard_testcase
@@ -136,9 +162,16 @@ def test_dominance_loop_simple(ctx, func, bld):
     bld.position_at_end(bb_B)
     bld.build_ret()
 
-    rev_dom_tree = tree_to_nodes(dominance.get_dominator_tree(func))
+    dom_tree, dom_frontiers = dominance.get_dominance_frontiers(func)
+    rev_dom_tree = tree_to_nodes(dom_tree)
     assert rev_dom_tree == Node(func.entry, {
         bb_A: Node(bb_A, {
             bb_B: Node(bb_B, {}),
         }),
     })
+
+    assert dom_frontiers == {
+        func.entry: set(),
+        bb_A: {bb_A},
+        bb_B: set(),
+    }
