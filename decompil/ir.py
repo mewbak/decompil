@@ -1,5 +1,7 @@
 from pygments.token import *
 
+from decompil import utils
+
 class Context:
 
     def __init__(self, pointer_width):
@@ -154,6 +156,9 @@ class BasicBlock:
     def format_label(self):
         return [(Name.Label, self.name)]
 
+    def __repr__(self):
+        return '<BasicBlock {}>'.format(self.format_label()[0][1])
+
 
 class Type:
     def __init__(self, context, width):
@@ -247,6 +252,9 @@ class Value:
             ]
         else:
             return [(Name.Variable, self.value.name)]
+
+    def __repr__(self):
+        return '<Value {}>'.format(utils.format_to_str(self))
 
 
 class Register:
