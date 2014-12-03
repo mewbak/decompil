@@ -495,7 +495,20 @@ class PhiInstruction(ComputingInstruction):
             if self.return_type is None:
                 self.return_type = value.type
             else:
-                assert value.type == self.return_type
+                # Allow no value yet since during phi nodes constructions, all
+                # required values may not be available yet.
+                assert value is None or value.type == self.return_type
+        # ... But there must be at least one value available.
+        assert self.return_type is not None
+
+    def set_value(self, basic_block, value):
+        assert value.type == self.return_type
+        for i, (bb, _) in enumerate(self.pairs):
+            if bb == basic_block:
+                self.pairs[i] = (bb, value)
+                break
+        else:
+            assert False
 
     @property
     def type(self):
