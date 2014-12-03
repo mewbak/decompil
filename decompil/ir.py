@@ -109,6 +109,12 @@ class BasicBlock:
             assert allow_incomplete
             return []
 
+    def __iter__(self):
+        return iter(self.instructions)
+
+    def __getitem__(self, idx):
+        return self.instructions.__getitem__(idx)
+
     def add_predecessor(self, bb):
         self.predecessors.add(bb)
 
@@ -255,6 +261,9 @@ class Value:
 
     def __repr__(self):
         return '<Value {}>'.format(utils.format_to_str(self))
+
+    def __eq__(self, other):
+        return self.type == other.type and self.value == other.value
 
 
 class Register:
