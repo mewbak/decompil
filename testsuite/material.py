@@ -113,6 +113,65 @@ def test_simple_phi(ctx, func):
 
 
 @with_builder
+def build_asymetric_phi(ctx, func, bld):
+    # %bb_0:
+    #   %0 = rload $reg_a
+    #   %1 = %0 = 0
+    #   branch if %1 then %bb_1 else %bb_2
+    # %bb_1:
+    #   %2 = rload $reg_b
+    #   jump to %bb_2
+    # %bb_2:
+    #   %3 = phi %bb_0 => %0, %bb_1 => %2
+    #   rstore %3 to %reg_c
+    #   ret
+
+    bb_entry = func.entry
+    bb_true = bld.create_basic_block()
+    bb_end = bld.create_basic_block()
+
+    value_entry = bld.build_rload(ctx.reg_a)
+    bld.build_branch(
+        bld.build_eq(value_entry, ctx.reg_a.type.create(0)),
+        bb_true, bb_end
+    )
+
+    bld.position_at_end(bb_true)
+    value_true = bld.build_rload(ctx.reg_b)
+    bld.build_jump(bb_end)
+
+    bld.position_at_end(bb_end)
+    value_end = bld.build_phi([
+        (bb_entry, value_entry),
+        (bb_true, value_true),
+    ])
+    bld.build_rstore(ctx.reg_c, value_end)
+    bld.build_ret()
+
+
+def test_asymetric_phi(ctx, func):
+    zero = LiveValue(ctx.reg_a.type, 0)
+    one = LiveValue(ctx.reg_a.type, 1)
+    two = LiveValue(ctx.reg_a.type, 2)
+
+    regs = {ctx.reg_a: zero, ctx.reg_b: one}
+    interpreter.run(func, regs)
+    assert regs == {
+        ctx.reg_a: zero,
+        ctx.reg_b: one,
+        ctx.reg_c: one,
+    }
+
+    regs = {ctx.reg_a: two, ctx.reg_b: one}
+    interpreter.run(func, regs)
+    assert regs == {
+        ctx.reg_a: two,
+        ctx.reg_b: one,
+        ctx.reg_c: two,
+    }
+
+
+@with_builder
 def build_simple_loop(ctx, func, bld):
     bb_cond = bld.create_basic_block()
     bb_loop = bld.create_basic_block()

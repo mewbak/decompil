@@ -73,3 +73,9 @@ def test_simple_phi(ctx, func, bld):
 def test_loop(ctx, func, bld):
     material.build_simple_loop(ctx, func)
     material.test_simple_loop(ctx, func)
+
+
+@standard_testcase
+def test_asymetric_phi(ctx, func, bld):
+    material.build_asymetric_phi(ctx, func)
+    material.test_asymetric_phi(ctx, func)
