@@ -4,14 +4,22 @@ from decompil import ir, utils
 
 
 class LiveValue:
-    def __init__(self, type, value):
-        assert isinstance(value, int)
+    def __init__(self, type, value=None):
+        assert value is None or isinstance(value, int)
         assert isinstance(type, (ir.IntType, ir.PointerType, ir.FunctionType))
         self.type = type
-        self.value = value & (2 ** type.width - 1)
+        if value is not None:
+            self.value = value & (2 ** type.width - 1)
+        else:
+            self.value = None
+
+    @property
+    def is_undef(self):
+        return self.value is None
 
     @property
     def as_signed(self):
+        assert not self.is_undef
         if self.value & 2 ** (self.type.width - 1):
             return self.value | (-1 ^ (2 ** self.type.width - 1))
         else:
@@ -19,14 +27,20 @@ class LiveValue:
 
     @property
     def as_unsigned(self):
+        assert not self.is_undef
         return self.value
+
+    @classmethod
+    def from_value(self, value):
+        return LiveValue(value.type, value.value)
 
     def __eq__(self, other):
         return (self.type, self.value) == (other.type, other.value)
 
     def __repr__(self):
         return '<LiveValue {} {}>'.format(
-            utils.format_to_str(self.type), self.value
+            utils.format_to_str(self.type),
+            'undef' if self.is_undef else self.value
         )
 
 
@@ -77,7 +91,7 @@ class Interpreter:
         if isinstance(ir_value.value, ir.ComputingInstruction):
             return self.values[ir_value.value]
         else:
-            return LiveValue(ir_value.type, ir_value.value)
+            return LiveValue.from_value(ir_value)
 
     def handle_jump(self, insn):
         return insn.destination
@@ -240,7 +254,7 @@ class Interpreter:
         raise NotImplementedError()
 
     def handle_rload(self, insn):
-        return self.registers[insn.source]
+        return self.registers.get(insn.source, LiveValue(insn.source.type))
 
     def handle_rstore(self, insn):
         self.registers[insn.destination] = self.get_value(insn.value)
