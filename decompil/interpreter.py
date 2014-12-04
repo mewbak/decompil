@@ -21,6 +21,9 @@ class LiveValue:
     def as_unsigned(self):
         return self.value
 
+    def __eq__(self, other):
+        return (self.type, self.value) == (other.type, other.value)
+
     def __repr__(self):
         return '<LiveValue {} {}>'.format(
             utils.format_to_str(self.type), self.value
@@ -88,10 +91,7 @@ class Interpreter:
 
     def handle_ret(self, insn):
         if insn.type != self.context.void_type:
-            self.return_value = ir.Value(
-                insn.type,
-                self.get_value(insn.return_value).as_unsigned
-            )
+            self.return_value = self.get_value(insn.return_value)
         return None
 
     def handle_phi(self, insn):
@@ -240,13 +240,10 @@ class Interpreter:
         raise NotImplementedError()
 
     def handle_rload(self, insn):
-        return self.get_value(self.registers[insn.source])
+        return self.registers[insn.source]
 
     def handle_rstore(self, insn):
-        value = self.get_value(insn.value)
-        self.registers[insn.destination] = ir.Value(
-            value.type, value.as_unsigned
-        )
+        self.registers[insn.destination] = self.get_value(insn.value)
 
     def handle_undef(self, insn):
         raise NotImplementedError()

@@ -1,6 +1,7 @@
 from testsuite.utils import *
 
 from decompil import interpreter
+from decompil.interpreter import LiveValue
 
 
 @standard_testcase
@@ -19,7 +20,7 @@ def test_empty(ctx, func, bld):
 
 @standard_testcase
 def test_simple_rstore(ctx, func, bld):
-    value = ctx.reg_a.type.create(42)
+    value = LiveValue(ctx.reg_a.type, 42)
     bld.build_rstore(ctx.reg_a, value)
     bld.build_ret()
 
@@ -59,16 +60,16 @@ def test_simple_phi(ctx, func, bld):
     bld.build_ret()
 
     base_regs = {
-        ctx.reg_b: ctx.reg_b.type.create(1),
-        ctx.reg_c: ctx.reg_c.type.create(2),
+        ctx.reg_b: LiveValue(ctx.reg_b.type, 1),
+        ctx.reg_c: LiveValue(ctx.reg_c.type, 2),
     }
     regs = dict(base_regs)
-    regs[ctx.reg_a] = ctx.reg_a.type.create(1)
+    regs[ctx.reg_a] = LiveValue(ctx.reg_b.type, 1)
     interpreter.run(func, regs)
     assert regs[ctx.reg_d] == base_regs[ctx.reg_b]
 
     regs = dict(base_regs)
-    regs[ctx.reg_a] = ctx.reg_a.type.create(0)
+    regs[ctx.reg_a] = LiveValue(ctx.reg_b.type, 0)
     interpreter.run(func, regs)
     assert regs[ctx.reg_d] == base_regs[ctx.reg_c]
 
@@ -110,14 +111,14 @@ def test_loop(ctx, func, bld):
     bld.build_rstore(ctx.reg_b, result_cond)
     bld.build_ret()
 
-    regs = {ctx.reg_a: ctx.reg_a.type.create(0)}
+    regs = {ctx.reg_a: LiveValue(ctx.reg_a.type, 0)}
     interpreter.run(func, regs)
-    assert regs[ctx.reg_b] == ctx.reg_b.type.create(1)
+    assert regs[ctx.reg_b] == LiveValue(ctx.reg_b.type, 1)
 
-    regs = {ctx.reg_a: ctx.reg_a.type.create(1)}
+    regs = {ctx.reg_a: LiveValue(ctx.reg_a.type, 1)}
     interpreter.run(func, regs)
-    assert regs[ctx.reg_b] == ctx.reg_b.type.create(2)
+    assert regs[ctx.reg_b] == LiveValue(ctx.reg_b.type, 2)
 
-    regs = {ctx.reg_a: ctx.reg_a.type.create(2)}
+    regs = {ctx.reg_a: LiveValue(ctx.reg_a.type, 2)}
     interpreter.run(func, regs)
-    assert regs[ctx.reg_b] == ctx.reg_b.type.create(4)
+    assert regs[ctx.reg_b] == LiveValue(ctx.reg_b.type, 4)
