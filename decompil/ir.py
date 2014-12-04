@@ -440,7 +440,7 @@ class ControlFlowInstruction(BaseInstruction):
             return [self.callee] + self.args
         elif (
             self.kind == RET
-            and self.function.type.return_type != self.context.void_type
+            and self.function.return_type != self.context.void_type
         ):
             return [self.return_value]
         else:
