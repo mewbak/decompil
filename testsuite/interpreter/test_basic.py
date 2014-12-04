@@ -58,13 +58,13 @@ def test_use_undef(ctx, func, bld):
 
 @standard_testcase
 def test_simple_rstore(ctx, func, bld):
-    value = LiveValue(ctx.reg_a.type, 42)
+    value = ctx.reg_a.type.create(42)
     bld.build_rstore(ctx.reg_a, value)
     bld.build_ret()
 
     regs = {}
     interpreter.run(func, regs)
-    assert regs[ctx.reg_a] == value
+    assert regs == {ctx.reg_a: LiveValue.from_value(value)}
 
 
 @standard_testcase
@@ -104,12 +104,22 @@ def test_simple_phi(ctx, func, bld):
     regs = dict(base_regs)
     regs[ctx.reg_a] = LiveValue(ctx.reg_b.type, 1)
     interpreter.run(func, regs)
-    assert regs[ctx.reg_d] == base_regs[ctx.reg_b]
+    assert regs == {
+        ctx.reg_a: LiveValue(ctx.reg_a.type, 1),
+        ctx.reg_b: base_regs[ctx.reg_b],
+        ctx.reg_c: base_regs[ctx.reg_c],
+        ctx.reg_d: base_regs[ctx.reg_b],
+    }
 
     regs = dict(base_regs)
     regs[ctx.reg_a] = LiveValue(ctx.reg_b.type, 0)
     interpreter.run(func, regs)
-    assert regs[ctx.reg_d] == base_regs[ctx.reg_c]
+    assert regs == {
+        ctx.reg_a: LiveValue(ctx.reg_a.type, 0),
+        ctx.reg_b: base_regs[ctx.reg_b],
+        ctx.reg_c: base_regs[ctx.reg_c],
+        ctx.reg_d: base_regs[ctx.reg_c],
+    }
 
 
 @standard_testcase
@@ -151,12 +161,21 @@ def test_loop(ctx, func, bld):
 
     regs = {ctx.reg_a: LiveValue(ctx.reg_a.type, 0)}
     interpreter.run(func, regs)
-    assert regs[ctx.reg_b] == LiveValue(ctx.reg_b.type, 1)
+    assert regs == {
+        ctx.reg_a: LiveValue(ctx.reg_a.type, 0),
+        ctx.reg_b: LiveValue(ctx.reg_b.type, 1),
+    }
 
     regs = {ctx.reg_a: LiveValue(ctx.reg_a.type, 1)}
     interpreter.run(func, regs)
-    assert regs[ctx.reg_b] == LiveValue(ctx.reg_b.type, 2)
+    assert regs == {
+        ctx.reg_a: LiveValue(ctx.reg_a.type, 1),
+        ctx.reg_b: LiveValue(ctx.reg_b.type, 2),
+    }
 
     regs = {ctx.reg_a: LiveValue(ctx.reg_a.type, 2)}
     interpreter.run(func, regs)
-    assert regs[ctx.reg_b] == LiveValue(ctx.reg_b.type, 4)
+    assert regs == {
+        ctx.reg_a: LiveValue(ctx.reg_a.type, 2),
+        ctx.reg_b: LiveValue(ctx.reg_b.type, 4),
+    }
