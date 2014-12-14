@@ -259,6 +259,9 @@ class Interpreter:
     def handle_rstore(self, insn):
         self.registers[insn.destination] = self.get_value(insn.value)
 
+    def handle_copy(self, insn):
+        return self.get_value(insn.value)
+
     def handle_undef(self, insn):
         raise NotImplementedError()
 
@@ -304,6 +307,8 @@ class Interpreter:
         ir.STORE: handle_store,
         ir.RLOAD: handle_rload,
         ir.RSTORE: handle_rstore,
+
+        ir.COPY: handle_copy,
 
         ir.UNDEF: handle_undef,
     }

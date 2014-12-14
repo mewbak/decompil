@@ -387,9 +387,12 @@ class BaseInstruction:
     # Registers (2)
     RLOAD, RSTORE,
 
+    # Misc (1)
+    COPY,
+
     # Undefined (1)
     UNDEF,
-) = range (5 + 4 + 5 + 1 + 6 + 10 + 2 + 2 + 1)
+) = range (5 + 4 + 5 + 1 + 6 + 10 + 2 + 2 + 1 + 1)
 
 
 NAMES = {
@@ -434,6 +437,8 @@ NAMES = {
     STORE: 'store',
     RLOAD: 'rload',
     RSTORE: 'rstore',
+
+    COPY: 'copy',
 
     UNDEF: 'undef',
 }
@@ -812,6 +817,27 @@ class StoreInstruction(BaseInstruction):
         result.append((Text, ' '))
         result.extend(self.destination.format())
         return result
+
+
+class CopyInstruction(ComputingInstruction):
+    KINDS = (COPY, )
+
+    def __init__(self, function, value, **kwargs):
+        super(CopyInstruction, self).__init__(function, COPY, **kwargs)
+        self.value = value
+
+    @property
+    def type(self):
+        return self.value.type
+
+    def map_inputs(self, func):
+        self.value = func(self.value)
+
+    def format_instruction(self):
+        return [
+            (Keyword, 'copy'),
+            (Text, ' '),
+        ] + self.value.format()
 
 
 class UndefInstruction(BaseInstruction):
