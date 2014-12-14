@@ -39,6 +39,10 @@ class Builder:
         self.basic_block = function.entry
         self.index = 0
 
+    def position_at_start(self, basic_block):
+        self.basic_block = basic_block
+        self.index = 0
+
     def position_at_end(self, basic_block):
         self.basic_block = basic_block
         self.index = len(basic_block.instructions)

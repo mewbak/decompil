@@ -51,10 +51,29 @@ class Function:
         self.return_type = context.void_type
         self.arg_types = []
 
+    def create_entry_basic_block(self):
+        """
+        Create an empty basic block and make it the entry point for this
+        function.
+        """
+        bb = BasicBlock(self)
+        self.basic_blocks.insert(0, bb)
+        return bb
+
     def create_basic_block(self):
         bb = BasicBlock(self)
         self.basic_blocks.append(bb)
         return bb
+
+    def replace_value(self, old_value, new_value):
+        for bb in self:
+            bb.replace_value(old_value, new_value)
+
+    def __iter__(self):
+        return iter(self.basic_blocks)
+
+    def __getitem__(self, idx):
+        return self.basic_blocks.__getitem__(idx)
 
     @property
     def entry(self):
@@ -88,6 +107,22 @@ class BasicBlock:
         self.instructions.insert(index, insn)
         for succ in self.get_successors(True):
             succ.add_predecessor(self)
+
+    def replace(self, index, insn):
+        old_insn = self.instructions[index]
+        self.instructions[index] = insn
+        # TODO: if affecting the last instruction, update the predecessor cache
+        # of successors.
+
+    def remove(self, index):
+        # TODO: same as for replace
+        self.instructions.pop(index)
+
+    def replace_value(self, old_value, new_value):
+        def helper(value):
+            return new_value if value == old_value else value
+        for insn in self:
+            insn.map_inputs(helper)
 
     @property
     def successors(self):
@@ -254,6 +289,9 @@ class Value:
             or isinstance(value, ComputingInstruction)
         )
 
+    def __eq__(self, other_value):
+        return self.value == other_value.value
+
     def format(self):
         if isinstance(self.value, int):
             return self.type.format() + [
@@ -293,7 +331,8 @@ class BaseInstruction:
                 if insn == self:
                     return '%{}'.format(i)
                 i += 1
-        assert False
+        # assert False
+        return '%??? ({})'.format(type(self).__name__)
 
     @property
     def type(self):
@@ -305,8 +344,9 @@ class BaseInstruction:
         assert type != self.context.void_type
         return Value(type, self)
 
-    @property
-    def inputs(self):
+    def map_inputs(self, func):
+        # TODO: since this enables the outer world to modify inputs, it would
+        # be greate to be able to perform validation afterwards.
         raise NotImplementedError()
 
     def format_instruction(self):
@@ -435,19 +475,18 @@ class ControlFlowInstruction(BaseInstruction):
         else:
             return self.context.void_type
 
-    @property
-    def inputs(self):
+    def map_inputs(self, func):
         if self.kind == BRANCH:
-            return [self.condition]
+            self.condition = func(self.condition)
         elif self.kind == CALL:
-            return [self.callee] + self.args
+            self.callee = func(self.callee)
+            for i, arg in enumerate(self.args):
+                self.args[i] = func(self.args[i])
         elif (
             self.kind == RET
             and self.function.return_type != self.context.void_type
         ):
-            return [self.return_value]
-        else:
-            return []
+            self.return_value = func(self.return_value)
 
     def format_instruction(self):
         if self.kind == JUMP:
@@ -534,9 +573,9 @@ class PhiInstruction(ComputingInstruction):
     def type(self):
         return self.return_type
 
-    @property
-    def inputs(self):
-        return [value for _, value in self.pairs]
+    def map_inputs(self, func):
+        for i, (basic_block, value) in enumerate(self.pairs):
+            self.pairs[i] = (basic_block, func(value))
 
     def format_instruction(self):
         result = [(Operator.Word, 'phi'), (Text, ' ')]
@@ -577,9 +616,8 @@ class ConversionInstruction(ComputingInstruction):
     def type(self):
         return self.dest_type
 
-    @property
-    def inputs(self):
-        return [self.value]
+    def map_inputs(self, func):
+        self.value = func(self.value)
 
     def format_instruction(self):
         result = [(Operator.Word, NAMES[self.kind]), (Text, ' ')]
@@ -628,9 +666,9 @@ class BinaryInstruction(ComputingInstruction):
     def type(self):
         return self.left.type
 
-    @property
-    def inputs(self):
-        return [self.left, self.right]
+    def map_inputs(self, func):
+        self.left = func(self.left)
+        self.right = func(self.right)
 
     def format_instruction(self):
         return self.left.format() + [
@@ -659,9 +697,8 @@ class ConcatenateInstruction(ComputingInstruction):
     def type(self):
         return self.return_type
 
-    @property
-    def inputs(self):
-        return self.operands
+    def map_inputs(self, func):
+        self.operands = func(self.operands)
 
 
 class ComparisonInstruction(ComputingInstruction):
@@ -691,9 +728,9 @@ class ComparisonInstruction(ComputingInstruction):
     def type(self):
         return self.context.boolean_type
 
-    @property
-    def inputs(self):
-        return [self.left, self.right]
+    def map_inputs(self, func):
+        self.left = func(self.left)
+        self.right = func(self.right)
 
     def format_instruction(self):
         return self.left.format() + [
@@ -722,12 +759,9 @@ class LoadInstruction(ComputingInstruction):
     def type(self):
         return self.return_type
 
-    @property
-    def inputs(self):
+    def map_inputs(self, func):
         if self.kind == LOAD:
-            return [self.source]
-        else:
-            return []
+            self.source = func(self.source)
 
     def format_instruction(self):
         result = [(Operator.Word, NAMES[self.kind]), (Text, ' ')]
@@ -761,12 +795,10 @@ class StoreInstruction(BaseInstruction):
     def type(self):
         return self.context.void_type
 
-    @property
-    def inputs(self):
+    def map_inputs(self, func):
         if self.kind == STORE:
-            return [self.destination, self.value]
-        else:
-            return [self.value]
+            self.destination = func(self.destination)
+        self.value = func(self.value)
 
     def format_instruction(self):
         result = [(Operator.Word, NAMES[self.kind]), (Text, ' ')]
@@ -792,9 +824,8 @@ class UndefInstruction(BaseInstruction):
     def type(self):
         return self.context.void_type
 
-    @property
-    def inputs(self):
-        return []
+    def map_inputs(self, func):
+        pass
 
     def format_instruction(self):
         return [(Operator.Word, '{}'.format(NAMES[self.kind]))]
