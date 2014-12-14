@@ -5,7 +5,11 @@ from pygments.formatters import get_formatter_by_name
 
 import decompil.builder
 from decompil.disassemblers import EntryDisassembler
-from decompil.optimizations import registers_to_ssa
+from decompil.optimizations import (
+    copy_elimination,
+    dead_code_elimination,
+    registers_to_ssa,
+)
 import gcdsp
 
 
@@ -34,6 +38,8 @@ with open(sys.argv[1], 'rb') as fp:
 
 opt_pipeline = [
     registers_to_ssa.RegistersToSSA,
+    copy_elimination.CopyElimination,
+    dead_code_elimination.DeadCodeElimination,
 ]
 
 for func in context.functions.values():

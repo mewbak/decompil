@@ -150,6 +150,9 @@ class BasicBlock:
     def __getitem__(self, idx):
         return self.instructions.__getitem__(idx)
 
+    def __len__(self):
+        return len(self.instructions)
+
     def add_predecessor(self, bb):
         self.predecessors.add(bb)
 
@@ -348,6 +351,15 @@ class BaseInstruction:
         # TODO: since this enables the outer world to modify inputs, it would
         # be greate to be able to perform validation afterwards.
         raise NotImplementedError()
+
+    @property
+    def inputs(self):
+        result = []
+        def helper(value):
+            result.append(value)
+            return value
+        self.map_inputs(helper)
+        return result
 
     def format_instruction(self):
         # TODO: remove this

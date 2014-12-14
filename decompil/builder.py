@@ -19,7 +19,7 @@ class Builder:
 
     @property
     def position(self):
-        if self.basic_block:
+        if self.basic_block is not None:
             return Position(self.basic_block, self.index)
         else:
             return None
