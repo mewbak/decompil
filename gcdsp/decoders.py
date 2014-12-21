@@ -378,7 +378,7 @@ def build_maybe_extend_acc(ctx, disas, bld, reg, value):
         bb_extend = bld.create_basic_block()
         bb_next = bld.create_basic_block()
 
-        # First test if the extension is actually required.
+        # First test if the extension is actually required by the SR register.
         bld.build_branch(
             build_sr_test(ctx, disas, bld, 14),
             bb_extend, bb_next
@@ -401,6 +401,7 @@ def build_maybe_extend_acc(ctx, disas, bld, reg, value):
 
         # If not, store the value in the regular register.
         bld.position_at_end(bb_next)
+        dest_mid_reg.build_store(bld, value)
     else:
         reg.build_store(bld, value)
 
