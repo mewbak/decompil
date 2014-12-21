@@ -259,6 +259,10 @@ class Interpreter:
     def handle_rstore(self, insn):
         self.registers[insn.destination] = self.get_value(insn.value)
 
+    def handle_select(self, insn):
+        cond = self.get_value(insn.condition)
+        return insn.true_value if cond.value else insn.false_value
+
     def handle_copy(self, insn):
         return self.get_value(insn.value)
 

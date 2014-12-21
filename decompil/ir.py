@@ -399,12 +399,12 @@ class BaseInstruction:
     # Registers (2)
     RLOAD, RSTORE,
 
-    # Misc (1)
-    COPY,
+    # Misc (2)
+    SELECT, COPY,
 
     # Undefined (1)
     UNDEF,
-) = range (5 + 4 + 5 + 1 + 6 + 10 + 2 + 2 + 1 + 1)
+) = range (5 + 4 + 5 + 1 + 6 + 10 + 2 + 2 + 2 + 1)
 
 
 NAMES = {
@@ -451,6 +451,7 @@ NAMES = {
     RSTORE: 'rstore',
 
     COPY: 'copy',
+    SELECT: 'select',
 
     UNDEF: 'undef',
 }
@@ -828,6 +829,43 @@ class StoreInstruction(BaseInstruction):
         result.extend(self.destination.type.format())
         result.append((Text, ' '))
         result.extend(self.destination.format())
+        return result
+
+
+class SelectInstruction(ComputingInstruction):
+    KINDS = (SELECT, )
+
+    def __init__(self, function, condition, true_value, false_value, **kwargs):
+        super(SelectInstruction, self).__init__(function, SELECT, **kwargs)
+        self.condition = condition
+
+        assert (
+            isinstance(condition.type, IntegerType)
+            and condition.type.width == 1
+        )
+        assert true_value.type == false_value.type
+        self.true_value = true_value
+        self.false_value = false_value
+
+    @property
+    def type(self):
+        return self.true_value.type
+
+    def map_inputs(self, func):
+        self.condition = func(self.condition)
+        self.true_value = func(self.true_value)
+        self.false_value = func(self.false_value)
+
+    def format_instruction(self):
+        result = [
+            (Operator.Word, 'select'), (Text, ' '),
+            (Keyword, 'if'), (Text, ' ')
+        ]
+        result.extend(self.condition.format())
+        result.extend([(Text, ' '), (Keyword, 'then'), (Text, ' ')])
+        result.extend(self.true_value.type.format())
+        result.extend([(Text, ' '), (Keyword, 'else'), (Text, ' ')])
+        result.extend(self.false_value.format())
         return result
 
 
