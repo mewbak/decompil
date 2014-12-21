@@ -10,6 +10,7 @@ from decompil.optimizations import (
     dead_code_elimination,
     registers_to_ssa,
 )
+from decompil.utils import function_to_dot
 import gcdsp
 
 
@@ -42,8 +43,16 @@ opt_pipeline = [
     dead_code_elimination.DeadCodeElimination,
 ]
 
-for func in context.functions.values():
-    for opt in opt_pipeline:
-        opt.process_function(func)
 
-print(pygments.format(context.format(), formatter))
+def output_dot(name, function):
+    with open('{}.dot'.format(name), 'w') as f:
+        f.write(function_to_dot(function))
+        f.write('\n')
+
+
+for func in context.functions.values():
+    func_name = '{:x}'.format(func.address)
+    output_dot('{}-0-original'.format(func_name), func)
+    for i, opt in enumerate(opt_pipeline, 1):
+        opt.process_function(func)
+        output_dot('{}-{}-{}'.format(func_name, i, opt.__name__), func)
