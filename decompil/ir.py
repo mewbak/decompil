@@ -298,7 +298,7 @@ class Value:
     def format(self):
         if isinstance(self.value, int):
             return self.type.format() + [
-                (Text, ' '), (Number, str(self.value))
+                (Text, ' '), (Number.Hex, hex(self.value))
             ]
         else:
             return [(Name.Variable, self.value.name)]
