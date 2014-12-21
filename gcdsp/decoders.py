@@ -262,7 +262,7 @@ opcodes_ext = [
 ["IR",0x0008,0x00fc,1,1,[[OpType.REG,1,0,0,0x0003]],False,False],
 ["NR",0x000c,0x00fc,1,1,[[OpType.REG,1,0,0,0x0003]],False,False],
 ["MV",0x0010,0x00f0,1,2,[[OpType.REG18,1,0,2,0x000c],[OpType.REG1C,1,0,0,0x0003]],False,False],
-["S",0x0020,0x00e4,1,2,[[OpType.PRG,1,0,0,0x0003],[OpType.REG1C,1,0,3,0x0018]],False,False],
+#["S",0x0020,0x00e4,1,2,[[OpType.PRG,1,0,0,0x0003],[OpType.REG1C,1,0,3,0x0018]],False,False],
 ["SN",0x0024,0x00e4,1,2,[[OpType.PRG,1,0,0,0x0003],[OpType.REG1C,1,0,3,0x0018]],False,False],
 # ["L",0x0040,0x00c4,1,2,[[OpType.REG18,1,0,3,0x0038],[OpType.PRG,1,0,0,0x0003]],False,False],
 ["LN",0x0044,0x00c4,1,2,[[OpType.REG18,1,0,3,0x0038],[OpType.PRG,1,0,0,0x0003]],False,False],
@@ -286,7 +286,7 @@ opcodes_ext = [
 
 
 class Reg:
-    ALL, ADDR, ACM, AXH, REG18, ACCUM = range(6)
+    ALL, ADDR, ACM, AXH, REG18, REG1C, ACCUM = range(7)
 
     def __init__(self, reg_class, mask, shift, invert=False):
         self.reg_class = reg_class
@@ -305,6 +305,8 @@ class Reg:
             return context.registers[0x1a:0x1c]
         elif self.reg_class == self.REG18:
             return context.registers[0x18:0x20]
+        elif self.reg_class == self.REG1C:
+            return context.registers[0x1c:0x20]
         elif self.reg_class == self.ACCUM:
             return context.long_accumulators
         else:
@@ -360,20 +362,37 @@ def build_increment_addr_reg(ctx, disas, bld, addr_reg):
     addr_reg.build_store(bld, new_addr)
 
 
-def build_maybe_extend_acc(ctx, disas, bld, reg, value):
+def match_middle_accumulator(ctx, reg):
     """
-    If reg is the middle part of an accumulator register, extend the value to
-    the whole 40-bit register. Otherwise, only store value to the register.
+    If reg is the middle part of an accumulator register, return all the parts
+    of this registers as a (high, middle, low) tuple.  Return None otherwise.
     """
     ac0m_reg = ctx.registers[0x1e]
     ac1m_reg = ctx.registers[0x1f]
     if reg in (ac0m_reg, ac1m_reg):
         if reg == ac0m_reg:
-            dest_high_reg = ctx.registers[0x10]
-            dest_low_reg = ctx.registers[0x1c]
+            high_reg = ctx.registers[0x10]
+            middle_reg = ctx.registers[0x1e]
+            low_reg = ctx.registers[0x1c]
         else:
-            dest_high_reg = ctx.registers[0x11]
-            dest_low_reg = ctx.registers[0x1d]
+            high_reg = ctx.registers[0x11]
+            middle_reg = ctx.registers[0x1f]
+            low_reg = ctx.registers[0x1d]
+        return (high_reg, middle_reg, low_reg)
+    else:
+        return None
+
+
+# TODO: remove code duplication between the two following helpers:
+
+def build_store_maybe_extend_acc(ctx, disas, bld, reg, value):
+    """
+    If reg is the middle part of an accumulator register, extend the value to
+    the whole 40-bit register. Otherwise, only store value to the register.
+    """
+    match = match_middle_accumulator(ctx, reg)
+    if match:
+        dest_high_reg, dest_mid_reg, dest_low_reg = match
 
         bb_extend = bld.create_basic_block()
         bb_next = bld.create_basic_block()
@@ -404,6 +423,59 @@ def build_maybe_extend_acc(ctx, disas, bld, reg, value):
         dest_mid_reg.build_store(bld, value)
     else:
         reg.build_store(bld, value)
+
+
+def build_load_maybe_extend_acc(ctx, disas, bld, reg):
+    """
+    If reg is the middle part of an accumulator register, return its extended
+    (saturated) value.  Otherwise, just return its value.
+    """
+    value = reg.build_load(bld)
+    match = match_middle_accumulator(ctx, reg)
+    if match:
+        high_reg, mid_reg, low_reg = match
+
+        bb_start = bld.current_basic_block
+        bb_extend = bld.create_basic_block()
+        bb_saturate = bld.create_basic_block()
+        bb_next = bld.create_basic_block()
+
+        # First test if the extension is actually required by the SR register.
+        bld.build_branch(
+            build_sr_test(ctx, disas, bld, 14),
+            bb_extend, bb_next
+        )
+
+        # If it is, then as soon as the high accumulator part is non-null,
+        # saturate the result.
+        bld.position_at_end(bb_extend)
+        high_reg_val = high_reg.build_load(bld)
+        bld.build_branch(
+            bld.build_ne(high_reg_val, high_reg.type.create(0)),
+            bb_saturate, bb_next
+        )
+
+        # Get a different result depending on the signedness of the accumulator
+        # register.  Remember that the high 8 bits of the high part of the
+        # accumulator is garbage.
+        bld.position_at_end(bb_saturate)
+        high_sign_val = bld.build_trunc(ctx.byte_type, high_reg_val)
+        ret_saturated_val = bld.build_select(
+            bld.build_sge(high_sign_val, ctx.byte_type.create(0)),
+            mid_reg.type.create(0x7fff),
+            mid_reg.type.create(0x8000)
+        )
+
+        # If not, store the value in the regular register.
+        bld.position_at_end(bb_next)
+        return bld.build_phi([
+            (bb_start, value),
+            (bb_extend, value),
+            (bb_saturate, ret_saturated_val),
+        ])
+
+    else:
+        return value
 
 
 def build_multiply(ctx, disas, bld, left, right):
@@ -508,7 +580,7 @@ class LRRI(Instruction):
         load_addr   = bld.build_bitcast(ctx.pointer_type, src_reg_val)
         load_val    = bld.build_load(load_addr)
 
-        build_maybe_extend_acc(ctx, disas, bld, dest_reg, load_val)
+        build_store_maybe_extend_acc(ctx, disas, bld, dest_reg, load_val)
         build_increment_addr_reg(ctx, disas, bld, src_reg)
 
 
@@ -528,5 +600,23 @@ class Ext_L(InstructionExtension):
         load_addr   = bld.build_bitcast(ctx.pointer_type, src_reg_val)
         load_val    = bld.build_load(load_addr)
 
-        build_maybe_extend_acc(ctx, disas, bld, dest_reg, load_val)
+        build_store_maybe_extend_acc(ctx, disas, bld, dest_reg, load_val)
         build_increment_addr_reg(ctx, disas, bld, src_reg)
+
+
+class Ext_S(InstructionExtension):
+    name            = 'S'
+    opcode          = 0x0020
+    opcode_mask     = 0x00e4
+    operands_format = [
+        Reg(Reg.ADDR,  0x0003, 0),
+        Reg(Reg.REG18, 0x0018, 3),
+    ]
+
+    def decode(self, ctx, disas, bld):
+        addr_reg, src_reg = self.decode_operands(ctx)
+
+        src_value = build_load_maybe_extend_acc(ctx, disas, bld, src_reg)
+        addr_value = bld.build_bitcast(ctx.pointer_type, addr_reg.build_load(bld))
+        bld.build_store(addr_value, src_value)
+        build_increment_addr_reg(ctx, disas, bld, addr_reg)
