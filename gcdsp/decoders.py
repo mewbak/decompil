@@ -205,7 +205,7 @@ opcodes = [
 ["MOVR",0x6000,0xf800,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.REG18,1,0,9,0x0600]],True,False],
 ["MOVAX",0x6800,0xfc00,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.AX,1,0,9,0x0200]],True,False],
 ["MOV",0x6c00,0xfe00,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.ACC_D,1,0,8,0x0100]],True,False],
-["MOVP",0x6e00,0xfe00,1,1,[[OpType.ACC,1,0,8,0x0100]],True,False],
+#["MOVP",0x6e00,0xfe00,1,1,[[OpType.ACC,1,0,8,0x0100]],True,False],
 ["ADDAXL",0x7000,0xfc00,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.REG18,1,0,9,0x0200]],True,False],
 ["INCM",0x7400,0xfe00,1,1,[[OpType.ACCM,1,0,8,0x0100]],True,False],
 ["INC",0x7600,0xfe00,1,1,[[OpType.ACC,1,0,8,0x0100]],True,False],
@@ -519,6 +519,63 @@ def build_store_prod(ctx, disas, bld, value):
     prod_h.build_store(bld, h_val)
 
     prod_m2.build_store(bld, prod_m2.type.create(0))
+
+
+class MOVP(Instruction):
+    name            = 'MOVP'
+    opcode          = 0x6e00
+    opcode_mask     = 0xfe00
+    operands_format = [
+        Reg(Reg.ACCUM, 0x0100, 8),
+    ]
+    is_extended = True
+
+    def decode(self, ctx, disas, bld):
+        acc_reg, = self.decode_operands(ctx)
+
+        prod_m2_val, prod_high_val, prod_m1_val, prod_low_val = (
+            ctx.prod_register.build_load_comp(bld)
+        )
+
+        prod_type = ctx.create_int_type(48)
+        # Add prod.h.
+        prod_val = bld.build_lshl(
+            bld.build_sext(prod_type,
+                bld.build_trunc(ctx.byte_type, prod_high_val)
+            ),
+            prod_type.create(32)
+        )
+        # Add prod.m1 and prod.m2.
+        prod_val = bld.build_add(prod_val,
+            bld.build_lshl(
+                bld.build_add(
+                    bld.build_sext(prod_type, prod_m1_val),
+                    bld.build_sext(prod_type, prod_m2_val),
+                ),
+                prod_type.create(16)
+            )
+        )
+        # Add prod.l.
+        prod_val = bld.build_add(prod_val,
+            bld.build_sext(prod_type, prod_low_val)
+        )
+
+        ctx.prod_register.build_store_comp(bld,
+            # prod.m2
+            prod_m2_val.type.create(0),
+            # prod.h
+            bld.build_trunc(
+                prod_high_val.type,
+                bld.build_lshr(prod_val, prod_val.type.create(32))
+            ),
+            # prod.m1
+            bld.build_trunc(
+                prod_m1_val.type,
+                bld.build_lshr(prod_val, prod_val.type.create(16))
+            ),
+            # prod.l
+            bld.build_trunc(prod_low_val.type, prod_val),
+        )
 
 
 class MULC(Instruction):
