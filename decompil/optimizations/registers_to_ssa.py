@@ -46,6 +46,8 @@ class RegistersToSSA(optimizations.Optimization):
             for insn in basic_block:
                 if insn.kind == ir.RSTORE:
                     store_sites[insn.destination].add(basic_block)
+                elif insn.kind == ir.RLOAD:
+                    store_sites[insn.source].add(basic_block)
         return store_sites
 
     @classmethod
@@ -78,7 +80,9 @@ class RegistersToSSA(optimizations.Optimization):
         # Introduce load instructions at a new entry point and force the
         # assumption that they are all initialized at this point. This way,
         # other register loads that are not dominated by a corresponding
-        # register store will inherit these values.
+        # register store will inherit these values. Do this even for registers
+        # that are never stored: this makes the data flow even more explicit,
+        # especially with respect to register barriers.
         old_entry = self.function.entry
         new_entry = self.function.create_entry_basic_block()
         self.bld.position_at_end(new_entry)
