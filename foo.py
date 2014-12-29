@@ -19,6 +19,7 @@ prog0 = (0x0cd3, 0x0d61)
 prog1 = (0x0d62, 0x0d6a)
 
 formatter = get_formatter_by_name('terminal256', style='native')
+text_formatter = get_formatter_by_name('text')
 
 context = gcdsp.Context()
 first, last = prog1
@@ -46,15 +47,18 @@ opt_pipeline = [
 ]
 
 
-def output_dot(name, function):
+def output_stage(name, function):
     with open('{}.dot'.format(name), 'w') as f:
         f.write(function_to_dot(function))
+        f.write('\n')
+    with open('{}.ll'.format(name), 'w') as f:
+        f.write(pygments.format(function.format(), text_formatter))
         f.write('\n')
 
 
 for func in context.functions.values():
     func_name = '{:x}'.format(func.address)
-    output_dot('{}-0-original'.format(func_name), func)
+    output_stage('{}-0-original'.format(func_name), func)
     for i, opt in enumerate(opt_pipeline, 1):
         opt.process_function(func)
-        output_dot('{}-{}-{}'.format(func_name, i, opt.__name__), func)
+        output_stage('{}-{}-{}'.format(func_name, i, opt.__name__), func)
