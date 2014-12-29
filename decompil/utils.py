@@ -59,14 +59,19 @@ def function_to_dot(func, style=None):
         )
     ]
 
+    color_attr = (
+        'color="{}"'.format(style.highlight_color)
+        if style.highlight_color else
+        ''
+    )
+
     def bb_name(bb):
         return bb.name.lstrip('%')
 
     for bb in func:
         name = bb_name(bb)
-        result.append('{} [shape=box,fontname=monospace,label={}];'.format(
-            name,
-            tokens_to_dot(bb.format(), style),
+        result.append('{} [shape=box,fontname=monospace,{},label={}];'.format(
+            name, color_attr, tokens_to_dot(bb.format(), style),
         ))
         for succ in bb.get_successors(True):
             result.append('{} -> {};'.format(
