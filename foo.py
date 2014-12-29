@@ -9,6 +9,7 @@ from decompil.optimizations import (
     copy_elimination,
     dead_code_elimination,
     registers_to_ssa,
+    to_expr,
 )
 from decompil.utils import function_to_dot
 import gcdsp
@@ -41,6 +42,7 @@ opt_pipeline = [
     registers_to_ssa.RegistersToSSA,
     copy_elimination.CopyElimination,
     dead_code_elimination.DeadCodeElimination,
+    to_expr.ToExpr,
 ]
 
 

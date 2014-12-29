@@ -41,6 +41,13 @@ class Context:
 
 class Function:
 
+    # The intermediate language is turned into various forms during the
+    # decompilation process:
+    #  - pure: this one is used while decoding instructions and performing
+    #    various analysis/optimizations on the program.
+    #  - expr: this one is the result of the aggregation of expressions.
+    FORM_PURE, FORM_EXPR = range(2)
+
     def __init__(self, context, address):
         self.context = context
         self.address = address
@@ -50,6 +57,8 @@ class Function:
 
         self.return_type = context.void_type
         self.arg_types = []
+
+        self.form = self.FORM_PURE
 
     def create_entry_basic_block(self):
         """
@@ -301,7 +310,15 @@ class Value:
                 (Text, ' '), (Number.Hex, hex(self.value))
             ]
         else:
-            return [(Name.Variable, self.value.name)]
+            insn = self.value
+            if insn.inline:
+                return (
+                    [(Punctuation, '(')]
+                    + insn.format_instruction()
+                    + [(Punctuation, ')')]
+                )
+            else:
+                return [(Name.Variable, self.value.name)]
 
     def __repr__(self):
         return '<Value {}>'.format(utils.format_to_str(self))
@@ -552,6 +569,15 @@ class ControlFlowInstruction(BaseInstruction):
 
 class ComputingInstruction(BaseInstruction):
     KINDS = ()
+
+    def __init__(self, function, kind, *args, **kwargs):
+        super(ComputingInstruction, self).__init__(
+            function, kind, *args, **kwargs
+        )
+        # Whether this instruction appears only as an operand of a single
+        # instruction and not directly in the basic block.  Must be false if
+        # the corresponding function is in the pure form.
+        self.inline = False
 
 
 class PhiInstruction(ComputingInstruction):
