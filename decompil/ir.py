@@ -74,6 +74,9 @@ class Function:
         self.basic_blocks.append(bb)
         return bb
 
+    def remove(self, index):
+        self.basic_blocks.pop(index)
+
     def replace_value(self, old_value, new_value):
         for bb in self:
             bb.replace_value(old_value, new_value)
@@ -161,11 +164,15 @@ class BasicBlock:
         return self.function.context
 
     @property
-    def name(self):
+    def index(self):
         for i, bb in enumerate(self.function.basic_blocks):
             if bb == self:
-                return '%bb_{}'.format(i)
+                return i
         assert False
+
+    @property
+    def name(self):
+        return '%bb_{}'.format(self.index)
 
     def __repr__(self):
         return '<BasicBlock {}>'.format(self.name)

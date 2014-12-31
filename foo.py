@@ -10,6 +10,7 @@ from decompil.optimizations import (
     copy_elimination,
     dead_code_elimination,
     registers_to_ssa,
+    strip_unused_branches,
     to_expr,
 )
 from decompil.utils import function_to_dot
@@ -46,6 +47,7 @@ opt_pipeline = [
     dead_code_elimination.DeadCodeElimination,
     binary_phi_to_select.BinaryPhiToSelect,
     to_expr.ToExpr,
+    strip_unused_branches.StripUnusedBranches,
 ]
 
 
