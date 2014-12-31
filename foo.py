@@ -66,5 +66,6 @@ for func in context.functions.values():
     func_name = '{:x}'.format(func.address)
     output_stage('{}-0-original'.format(func_name), func)
     for i, opt in enumerate(opt_pipeline, 1):
+        print('Running {}'.format(opt.__name__))
         opt.process_function(func)
         output_stage('{}-{}-{}'.format(func_name, i, opt.__name__), func)
