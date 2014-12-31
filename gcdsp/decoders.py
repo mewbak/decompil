@@ -60,7 +60,7 @@ opcodes = [
 ["RETLNZ",0x02dc,0xffff,1,0,[],False,False],
 ["RETLZ",0x02dd,0xffff,1,0,[],False,False],
 ["RETO",0x02de,0xffff,1,0,[],False,False],
-["RET",0x02df,0xffff,1,0,[],False,True],
+# ["RET",0x02df,0xffff,1,0,[],False,True],
 ["RTI",0x02ff,0xffff,1,0,[],False,True],
 ["CALLGE",0x02b0,0xffff,2,1,[[OpType.ADDR_I,2,1,0,0xffff]],False,False],
 ["CALLL",0x02b1,0xffff,2,1,[[OpType.ADDR_I,2,1,0,0xffff]],False,False],
@@ -179,7 +179,7 @@ opcodes = [
 ["LRRN",0x1980,0xff80,1,2,[[OpType.REG,1,0,0,0x001f],[OpType.PRG,1,0,5,0x0060]],False,False],
 ["SRR",0x1a00,0xff80,1,2,[[OpType.PRG,1,0,5,0x0060],[OpType.REG,1,0,0,0x001f]],False,False],
 ["SRRD",0x1a80,0xff80,1,2,[[OpType.PRG,1,0,5,0x0060],[OpType.REG,1,0,0,0x001f]],False,False],
-["SRRI",0x1b00,0xff80,1,2,[[OpType.PRG,1,0,5,0x0060],[OpType.REG,1,0,0,0x001f]],False,False],
+# ["SRRI",0x1b00,0xff80,1,2,[[OpType.PRG,1,0,5,0x0060],[OpType.REG,1,0,0,0x001f]],False,False],
 ["SRRN",0x1b80,0xff80,1,2,[[OpType.PRG,1,0,5,0x0060],[OpType.REG,1,0,0,0x001f]],False,False],
 ["LRS",0x2000,0xf800,1,2,[[OpType.REG18,1,0,8,0x0700],[OpType.MEM,1,0,0,0x00ff]],False,False],
 ["SRS",0x2800,0xf800,1,2,[[OpType.MEM,1,0,0,0x00ff],[OpType.REG18,1,0,8,0x0700]],False,False],
@@ -465,6 +465,7 @@ def build_load_maybe_extend_acc(ctx, disas, bld, reg):
             mid_reg.type.create(0x7fff),
             mid_reg.type.create(0x8000)
         )
+        bld.build_jump(bb_next)
 
         # If not, store the value in the regular register.
         bld.position_at_end(bb_next)
@@ -641,6 +642,38 @@ class LRRI(Instruction):
         build_increment_addr_reg(ctx, disas, bld, src_reg)
 
 
+class SRRI(Instruction):
+    name            = 'SRRI'
+    opcode          = 0x1b00
+    opcode_mask     = 0xff80
+    operands_format = [
+        Reg(Reg.ADDR, 0x0060, 5),
+        Reg(Reg.ALL,  0x001f, 0),
+    ]
+
+    def decode(self, ctx, disas, bld):
+        addr_reg, src_reg = self.decode_operands(ctx)
+
+        src_value = build_load_maybe_extend_acc(ctx, disas, bld, src_reg)
+        addr_value = bld.build_bitcast(
+            ctx.pointer_type,
+            addr_reg.build_load(bld)
+        )
+        bld.build_store(addr_value, src_value)
+        build_increment_addr_reg(ctx, disas, bld, addr_reg)
+
+
+class RET(Instruction):
+    name            = 'RET'
+    opcode          = 0x02df
+    opcode_mask     = 0xffff
+    operands_format = []
+
+    def decode(self, ctx, disas, bld):
+        bld.build_ret()
+        disas.stop_basic_block()
+
+
 class Ext_L(InstructionExtension):
     name            = 'L'
     opcode          = 0x0040
@@ -674,6 +707,9 @@ class Ext_S(InstructionExtension):
         addr_reg, src_reg = self.decode_operands(ctx)
 
         src_value = build_load_maybe_extend_acc(ctx, disas, bld, src_reg)
-        addr_value = bld.build_bitcast(ctx.pointer_type, addr_reg.build_load(bld))
+        addr_value = bld.build_bitcast(
+            ctx.pointer_type,
+            addr_reg.build_load(bld)
+        )
         bld.build_store(addr_value, src_value)
         build_increment_addr_reg(ctx, disas, bld, addr_reg)
