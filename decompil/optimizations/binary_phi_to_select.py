@@ -1,6 +1,7 @@
 from collections import namedtuple
 
 from decompil import ir, optimizations
+from decompil.analysis.predecessors import get_predecessors
 
 
 # Holder for the pattern matching below (see
@@ -30,21 +31,29 @@ class BinaryPhiToSelect(optimizations.Optimization):
 
     @classmethod
     def process_function(cls, function):
-        # We are lazy here and don't traverse instructions in depth.
-        assert function.form == function.FORM_PURE
+        self = cls(function)
+        self._process()
 
-        for bb in function:
+    def __init__(self, function):
+        self.function = function
+        self.predecessors = get_predecessors(function)
+
+    def _process(self):
+        # We are lazy here and don't traverse instructions in depth.
+        assert self.function.form == ir.Function.FORM_PURE
+
+        for bb in self.function:
             # We work only on PHI nodes that have two inputs, so we need
             # exactly two predecessors.
-            predecessors = bb.predecessors
+            predecessors = self.predecessors[bb]
             if len(predecessors) != 2:
                 continue
 
             # Look for an IF pattern.
             pred_left, pred_right = predecessors
             match = (
-                cls.match_if_pattern(pred_left, pred_right)
-                or cls.match_if_pattern(pred_right, pred_left)
+                self.match_if_pattern(pred_left, pred_right)
+                or self.match_if_pattern(pred_right, pred_left)
             )
             if not match:
                 continue
@@ -65,14 +74,14 @@ class BinaryPhiToSelect(optimizations.Optimization):
 
                 # Finally replace the PHI nodes with a SELECT one!
                 select_node = ir.SelectInstruction(
-                    function, match.condition, then_value, else_value,
+                    self.function, match.condition, then_value, else_value,
                     origin=insn.origin,
                 )
                 bb.replace(i, select_node)
-                function.replace_value(insn.as_value, select_node.as_value)
+                self.function.replace_value(
+                    insn.as_value, select_node.as_value)
 
-    @classmethod
-    def match_if_pattern(cls, left, right):
+    def match_if_pattern(self, left, right):
         """
         Match an IF/THEN(/ELSE) pattern. If there is a match, return a
         PatternMatch instance. Return None otherwise.
@@ -81,12 +90,13 @@ class BinaryPhiToSelect(optimizations.Optimization):
         predecessors. Their order matters, so one should also try to match
         after switching them.
         """
-        left_preds, right_preds = left.predecessors, right.predecessors
+        left_preds = self.predecessors[left]
+        right_preds = self.predecessors[right]
 
         # Assume `left` is the THEN basic block.
         if len(left_preds) != 1:
             return None
-        left_pred = left_preds.pop()
+        left_pred = list(left_preds)[0]
         origin_bb = left_pred
 
         if not (

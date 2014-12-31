@@ -110,21 +110,15 @@ class BasicBlock:
     def __init__(self, function):
         self.function = function
         self.instructions = []
-        self.predecessors = set()
 
     def insert(self, index, insn):
         self.instructions.insert(index, insn)
-        for succ in self.get_successors(True):
-            succ.add_predecessor(self)
 
     def replace(self, index, insn):
         old_insn = self.instructions[index]
         self.instructions[index] = insn
-        # TODO: if affecting the last instruction, update the predecessor cache
-        # of successors.
 
     def remove(self, index):
-        # TODO: same as for replace
         self.instructions.pop(index)
 
     def replace_value(self, old_value, new_value):
@@ -162,9 +156,6 @@ class BasicBlock:
     def __len__(self):
         return len(self.instructions)
 
-    def add_predecessor(self, bb):
-        self.predecessors.add(bb)
-
     @property
     def context(self):
         return self.function.context
@@ -180,17 +171,21 @@ class BasicBlock:
         return '<BasicBlock {}>'.format(self.name)
 
     def format(self):
+        # Yes... when serializing a whole function, this is computed once per
+        # basic block instead of once for the function... But do we care?
+        from decompil.analysis.predecessors import get_predecessors
+        preds = get_predecessors(self.function, allow_incomplete=True)[self]
         indentation = (Text, '    ')
 
         result = self.format_label() + [
             (Punctuation, ':'),
             (Text, '\n')
         ]
-        if self.predecessors:
+        if preds:
             result.extend([
                 indentation,
                 (Comment, '; Predecessors: {}'.format(', '.join(sorted(
-                    pred.name for pred in self.predecessors
+                    pred.name for pred in preds
                 )))),
                 (Text, '\n'),
             ])

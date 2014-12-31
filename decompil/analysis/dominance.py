@@ -1,6 +1,8 @@
 import collections
 import itertools
 
+from decompil.analysis.predecessors import get_predecessors
+
 
 class Tree:
     """General tree with both parent and children links."""
@@ -98,6 +100,8 @@ def get_dominator_tree(func):
     # Appel, Chapter 19 Static Single-Assignment Form, algorithms 19.9 and
     # 19.10 (naive versions).
 
+    predecessors = get_predecessors(func)
+
     dfs_tree, dfs_numbers = get_dfs_spanning_tree(func)
     # Mapping: basic block -> its immediate dominator. Once completely built,
     # we can build the dominator tree from it.
@@ -139,7 +143,7 @@ def get_dominator_tree(func):
         semi_candidate = parent
         semi_candidate_number = dfs_numbers[semi_candidate]
 
-        for pred in basic_block.predecessors:
+        for pred in predecessors[basic_block]:
             s = (
                 pred
                 if dfs_numbers[pred] <= i else

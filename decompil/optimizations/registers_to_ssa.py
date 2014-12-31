@@ -6,6 +6,7 @@ from pygments.token import *
 
 from decompil import builder, ir, optimizations
 from decompil.analysis.dominance import get_dominance_frontiers
+from decompil.analysis.predecessors import get_predecessors
 
 
 class DummyPhiArgument(ir.ComputingInstruction):
@@ -57,6 +58,7 @@ class RegistersToSSA(optimizations.Optimization):
 
     def __init__(self, function):
         self.function = function
+        self.predecessors = get_predecessors(function)
         self.bld = builder.Builder()
 
         # Mapping: register -> set of all basic blocks that store a value in
@@ -138,7 +140,7 @@ class RegistersToSSA(optimizations.Optimization):
                             bb_pred,
                             DummyPhiArgument(self.function, register).as_value
                         )
-                        for bb_pred in basic_block.predecessors
+                        for bb_pred in self.predecessors[basic_block]
                     ])
                     visited_bb.add(basic_block)
                     if register not in self.stored_registers[basic_block]:
