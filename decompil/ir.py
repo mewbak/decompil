@@ -866,7 +866,7 @@ class SelectInstruction(ComputingInstruction):
         self.condition = condition
 
         assert (
-            isinstance(condition.type, IntegerType)
+            isinstance(condition.type, IntType)
             and condition.type.width == 1
         )
         assert true_value.type == false_value.type
@@ -889,7 +889,7 @@ class SelectInstruction(ComputingInstruction):
         ]
         result.extend(self.condition.format())
         result.extend([(Text, ' '), (Keyword, 'then'), (Text, ' ')])
-        result.extend(self.true_value.type.format())
+        result.extend(self.true_value.format())
         result.extend([(Text, ' '), (Keyword, 'else'), (Text, ' ')])
         result.extend(self.false_value.format())
         return result
