@@ -9,6 +9,7 @@ from decompil.optimizations import (
     binary_phi_to_select,
     copy_elimination,
     dead_code_elimination,
+    merge_basic_block_sequences,
     registers_to_ssa,
     strip_unused_branches,
     to_expr,
@@ -48,6 +49,7 @@ opt_pipeline = [
     binary_phi_to_select.BinaryPhiToSelect,
     to_expr.ToExpr,
     strip_unused_branches.StripUnusedBranches,
+    merge_basic_block_sequences.MergeBasicBlockSequences,
 ]
 
 

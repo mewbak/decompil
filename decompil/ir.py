@@ -615,6 +615,18 @@ class PhiInstruction(ComputingInstruction):
         else:
             assert False
 
+    def replace_predecessor(self, old_bb, new_bb):
+        """
+        Replace the `old_bb` predecessor for this node with `new_bb`. `old_bb`
+        is supposed to actually be a predecessor.
+        """
+        for i, (bb, value) in enumerate(self.pairs):
+            if bb == old_bb:
+                self.pairs[i] = (new_bb, value)
+                break
+        else:
+            assert False
+
     @property
     def type(self):
         return self.return_type
