@@ -50,6 +50,7 @@ opt_pipeline = [
     to_expr.ToExpr,
     strip_unused_branches.StripUnusedBranches,
     merge_basic_block_sequences.MergeBasicBlockSequences,
+    to_expr.ToExpr,
 ]
 
 
