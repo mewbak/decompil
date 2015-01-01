@@ -15,7 +15,14 @@ class ToExpr(optimizations.Optimization):
             # remove it from its basic block.
             to_remove = []
             for i, insn in enumerate(bb):
-                if len(uses[insn]) != 1:
+                # Do not inline:
+                #   - instructions that are used more than once;
+                #   - LOAD/RLOAD ones;
+                #   - PHI ones when it would violate the SSA rules.
+                # TODO: for LOAD/RLOAD instruction, *maybe* it would be
+                # interesting to enable inlining when we know the register has
+                # not changed at the destination.
+                if len(uses[insn]) != 1 or insn.kind in (ir.LOAD, ir.RLOAD):
                     continue
                 consumer = list(uses[insn])[0]
 
