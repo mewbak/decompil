@@ -150,7 +150,7 @@ opcodes = [
 ["ASR",0x14c0,0xfec0,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.IMM,1,0,0,0x003f]],False,False],
 ["LSRN",0x02ca,0xffff,1,0,[],False,False],
 ["ASRN",0x02cb,0xffff,1,0,[],False,False],
-["LRI",0x0080,0xffe0,2,2,[[OpType.REG,1,0,0,0x001f],[OpType.IMM,2,1,0,0xffff]],False,False],
+#["LRI",0x0080,0xffe0,2,2,[[OpType.REG,1,0,0,0x001f],[OpType.IMM,2,1,0,0xffff]],False,False],
 ["LR",0x00c0,0xffe0,2,2,[[OpType.REG,1,0,0,0x001f],[OpType.MEM,2,1,0,0xffff]],False,False],
 ["SR",0x00e0,0xffe0,2,2,[[OpType.MEM,2,1,0,0xffff],[OpType.REG,1,0,0,0x001f]],False,False],
 ["MRR",0x1c00,0xfc00,1,2,[[OpType.REG,1,0,5,0x03e0],[OpType.REG,1,0,0,0x001f]],False,False],
@@ -620,6 +620,23 @@ class MULCMV(Instruction):
         prod_new_val = build_multiply(ctx, disas, bld, acm_val, axh_val)
         build_store_prod(ctx, disas, bld, prod_new_val)
         accum_reg.build_store_comp(bld, *prod_old_values)
+
+
+class LRI(Instruction):
+    name            = 'LRI'
+    opcode          = 0x0080
+    opcode_mask     = 0xffe0
+    operands_format = [
+        Reg(Reg.ALL, 0x001f, 0),
+    ]
+    have_extra_operand = True
+
+    def decode(self, ctx, disas, bld):
+        dest_reg, = self.decode_operands(ctx)
+        build_store_maybe_extend_acc(
+            ctx, disas, bld,
+            dest_reg, ctx.half_type.create(self.extra_operand)
+        )
 
 
 class LRRI(Instruction):

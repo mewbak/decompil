@@ -180,6 +180,7 @@ class Instruction(BaseDecoder):
         self.extension = extension
         assert self.is_extended == (extension is not None)
         assert self.have_extra_operand == (extra_operand is not None)
+        self.extra_operand = extra_operand
         if self.extension:
             self.extension.instruction = self
 
