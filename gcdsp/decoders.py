@@ -220,12 +220,12 @@ opcodes = [
 ["CLRP",0x8400,0xff00,1,0,[],True,False],
 ["TSTPROD",0x8500,0xff00,1,0,[],True,False],
 ["TSTAXH",0x8600,0xfe00,1,1,[[OpType.REG1A,1,0,8,0x0100]],True,False],
-["M2",0x8a00,0xff00,1,0,[],True,False],
-["M0",0x8b00,0xff00,1,0,[],True,False],
-["CLR15",0x8c00,0xff00,1,0,[],True,False],
-["SET15",0x8d00,0xff00,1,0,[],True,False],
-["SET16",0x8e00,0xff00,1,0,[],True,False],
-["SET40",0x8f00,0xff00,1,0,[],True,False],
+#["M2",0x8a00,0xff00,1,0,[],True,False],
+#["M0",0x8b00,0xff00,1,0,[],True,False],
+#["CLR15",0x8c00,0xff00,1,0,[],True,False],
+#["SET15",0x8d00,0xff00,1,0,[],True,False],
+#["SET16",0x8e00,0xff00,1,0,[],True,False],
+#["SET40",0x8f00,0xff00,1,0,[],True,False],
 ["MUL",0x9000,0xf700,1,2,[[OpType.REG18,1,0,11,0x0800],[OpType.REG1A,1,0,11,0x0800]],True,False],
 ["ASR16",0x9100,0xf700,1,1,[[OpType.ACC,1,0,11,0x0800]],True,False],
 ["MULMVZ",0x9200,0xf600,1,3,[[OpType.REG18,1,0,11,0x0800],[OpType.REG1A,1,0,11,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
@@ -317,13 +317,36 @@ class Reg:
         return self.get_reg_class(context)[value]
 
 
+SR_BIT_MUL = 13
+SR_BIT_40_MODE = 14
+SR_BIT_UNSIGNED = 15
+
+
 def build_sr_test(ctx, disas, bld, bit_no):
+    """Return an instruction that computes the `bit_no`nth SR bit."""
     sr_reg = ctx.registers[0x13]
-    bit_mask =  sr_reg.type.create(1 << bit_no)
+    bit_mask = sr_reg.type.create(1 << bit_no)
     return bld.build_ne(
         bld.build_and(sr_reg.build_load(bld), bit_mask),
         sr_reg.type.create(0)
     )
+
+
+def build_sr_set(ctx, disas, bld, bit_no, clear):
+    """
+    Build instruction that set (0 if `clear`, 1 otherwise) `bit_no`nth SR bit.
+    """
+    sr_reg = ctx.registers[0x13]
+    sr_val = sr_reg.build_load(bld)
+    bit_mask = sr_reg.type.create(1 << bit_no)
+    if clear:
+        sr_val = bld.build_and(
+            sr_val,
+            bld.build_xor(bit_mask, sr_reg.type.create(-1))
+        )
+    else:
+        sr_val = bld.build_or(sr_val, bit_mask)
+    sr_reg.build_store(bld, sr_val)
 
 
 def build_increment_addr_reg(ctx, disas, bld, addr_reg):
@@ -497,7 +520,7 @@ def build_multiply(ctx, disas, bld, left, right):
     prod_val = bld.build_mul(left_ext, right_ext)
     # If the corresponding SR bit is set then double each product.
     bld.build_branch(
-        build_sr_test(ctx, disas, bld, 13),
+        build_sr_test(ctx, disas, bld, SR_BIT_MUL),
         bb_double, bb_next
     )
 
@@ -528,6 +551,36 @@ def build_store_prod(ctx, disas, bld, value):
     prod_h.build_store(bld, h_val)
 
     prod_m2.build_store(bld, prod_m2.type.create(0))
+
+
+class CLR15(Instruction):
+    name            = 'CLR15'
+    opcode          = 0x8c00
+    opcode_mask     = 0xff00
+    operands_format = []
+
+    def decode(self, ctx, disas, bld):
+        build_sr_set(ctx, disas, bld, SR_BIT_UNSIGNED, True)
+
+
+class M2(Instruction):
+    name            = 'M2'
+    opcode          = 0x8a00
+    opcode_mask     = 0xff00
+    operands_format = []
+
+    def decode(self, ctx, disas, bld):
+        build_sr_set(ctx, disas, bld, SR_BIT_MUL, True)
+
+
+class M0(Instruction):
+    name            = 'M0'
+    opcode          = 0x8b00
+    opcode_mask     = 0xff00
+    operands_format = []
+
+    def decode(self, ctx, disas, bld):
+        build_sr_set(ctx, disas, bld, SR_BIT_MUL, False)
 
 
 class MOVP(Instruction):
@@ -735,6 +788,36 @@ class RET(Instruction):
     def decode(self, ctx, disas, bld):
         bld.build_ret()
         disas.stop_basic_block()
+
+
+class SET15(Instruction):
+    name            = 'SET15'
+    opcode          = 0x8d00
+    opcode_mask     = 0xff00
+    operands_format = []
+
+    def decode(self, ctx, disas, bld):
+        build_sr_set(ctx, disas, bld, SR_BIT_UNSIGNED, False)
+
+
+class SET16(Instruction):
+    name            = 'SET15'
+    opcode          = 0x8e00
+    opcode_mask     = 0xff00
+    operands_format = []
+
+    def decode(self, ctx, disas, bld):
+        build_sr_set(ctx, disas, bld, SR_BIT_40_MODE, False)
+
+
+class SET40(Instruction):
+    name            = 'SET15'
+    opcode          = 0x8f00
+    opcode_mask     = 0xff00
+    operands_format = []
+
+    def decode(self, ctx, disas, bld):
+        build_sr_set(ctx, disas, bld, SR_BIT_40_MODE, False)
 
 
 class Ext_L(InstructionExtension):
