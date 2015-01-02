@@ -202,7 +202,7 @@ opcodes = [
 ["SUBAX",0x5800,0xfc00,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.AX,1,0,9,0x0200]],True,False],
 ["SUB",0x5c00,0xfe00,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.ACC_D,1,0,8,0x0100]],True,False],
 ["SUBP",0x5e00,0xfe00,1,1,[[OpType.ACC,1,0,8,0x0100]],True,False],
-["MOVR",0x6000,0xf800,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.REG18,1,0,9,0x0600]],True,False],
+#["MOVR",0x6000,0xf800,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.REG18,1,0,9,0x0600]],True,False],
 ["MOVAX",0x6800,0xfc00,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.AX,1,0,9,0x0200]],True,False],
 ["MOV",0x6c00,0xfe00,1,2,[[OpType.ACC,1,0,8,0x0100],[OpType.ACC_D,1,0,8,0x0100]],True,False],
 #["MOVP",0x6e00,0xfe00,1,1,[[OpType.ACC,1,0,8,0x0100]],True,False],
@@ -364,63 +364,71 @@ def build_increment_addr_reg(ctx, disas, bld, addr_reg):
 
 def match_middle_accumulator(ctx, reg):
     """
-    If reg is the middle part of an accumulator register, return all the parts
-    of this registers as a (high, middle, low) tuple.  Return None otherwise.
+    If reg is the middle part of an accumulator register, return the
+    corresponding long accumulator.  Return None otherwise.
     """
     ac0m_reg = ctx.registers[0x1e]
     ac1m_reg = ctx.registers[0x1f]
     if reg in (ac0m_reg, ac1m_reg):
-        if reg == ac0m_reg:
-            high_reg = ctx.registers[0x10]
-            middle_reg = ctx.registers[0x1e]
-            low_reg = ctx.registers[0x1c]
-        else:
-            high_reg = ctx.registers[0x11]
-            middle_reg = ctx.registers[0x1f]
-            low_reg = ctx.registers[0x1d]
-        return (high_reg, middle_reg, low_reg)
+        return (
+            ctx.long_accumulators[0]
+            if reg == ac0m_reg else
+            ctx.long_accumulators[1]
+        )
     else:
         return None
+
+
+def build_store_extend_acc(ctx, disas, bld, reg, value):
+    """Extend `value` to the whole 40-bit register `reg`."""
+    dest_high_reg, dest_mid_reg, dest_low_reg = reg.registers
+
+    # Store the extended value in the whole acculumator: low part (16 lowest
+    # bits) are 0 and the 8 upper ones are sign extended.
+    sext_type = ctx.create_int_type(24)
+    sext_value = bld.build_lshr(
+        bld.build_sext(sext_type, value),
+        sext_type.create(16)
+    )
+    dest_high_reg.build_store(bld,
+        bld.build_trunc(dest_high_reg.type, sext_value)
+    )
+    dest_mid_reg.build_store(bld, value)
+    dest_low_reg.build_store(bld, dest_low_reg.type.create(0))
 
 
 # TODO: remove code duplication between the two following helpers:
 
 def build_store_maybe_extend_acc(ctx, disas, bld, reg, value):
     """
-    If reg is the middle part of an accumulator register, extend the value to
-    the whole 40-bit register. Otherwise, only store value to the register.
+    If reg is the middle part of an accumulator register and if the SR register
+    requires it, extend the value to the whole 40-bit register. Otherwise, only
+    store value to the register.
     """
     match = match_middle_accumulator(ctx, reg)
     if match:
-        dest_high_reg, dest_mid_reg, dest_low_reg = match
-
+        _, dest_mid_reg, _ = match.registers
         bb_extend = bld.create_basic_block()
+        bb_regular = bld.create_basic_block()
         bb_next = bld.create_basic_block()
 
         # First test if the extension is actually required by the SR register.
         bld.build_branch(
             build_sr_test(ctx, disas, bld, 14),
-            bb_extend, bb_next
+            bb_extend, bb_regular
         )
 
-        # If it is, store the extended value in the whole acculumator: low
-        # part (16 lowest bits) are 0 and the 8 upper ones are sign
-        # extended.
+        # If it is, extend.
         bld.position_at_end(bb_extend)
-        sext_type = ctx.create_int_type(24)
-        sext_value = bld.build_lshr(
-            bld.build_sext(sext_type, value),
-            sext_type.create(16)
-        )
-        dest_high_reg.build_store(bld,
-            bld.build_trunc(dest_high_reg.type, sext_value)
-        )
-        dest_low_reg.build_store(bld, dest_low_reg.type.create(0))
+        build_store_extend_acc(ctx, disas, bld, match, value)
         bld.build_jump(bb_next)
 
-        # If not, store the value in the regular register.
-        bld.position_at_end(bb_next)
+        # Otherwise, just move to middle part.
+        bld.position_at_end(bb_regular)
         dest_mid_reg.build_store(bld, value)
+        bld.build_jump(bb_next)
+
+        bld.position_at_end(bb_next)
     else:
         reg.build_store(bld, value)
 
@@ -433,7 +441,7 @@ def build_load_maybe_extend_acc(ctx, disas, bld, reg):
     value = reg.build_load(bld)
     match = match_middle_accumulator(ctx, reg)
     if match:
-        high_reg, mid_reg, low_reg = match
+        high_reg, mid_reg, low_reg = match.registers
 
         bb_start = bld.current_basic_block
         bb_extend = bld.create_basic_block()
@@ -577,6 +585,28 @@ class MOVP(Instruction):
             # prod.l
             bld.build_trunc(prod_low_val.type, prod_val),
         )
+
+        # TODO: update SR register
+
+
+class MOVR(Instruction):
+    name            = 'MOVR'
+    opcode          = 0x6000
+    opcode_mask     = 0xf800
+    operands_format = [
+        Reg(Reg.ACCUM, 0x0100, 8),
+        Reg(Reg.REG18, 0x0600, 9),
+    ]
+    is_extended     = True
+
+    def decode(self, ctx, disas, bld):
+        dest_reg, src_reg = self.decode_operands(ctx)
+
+        build_store_extend_acc(
+            ctx, disas, bld,
+            dest_reg, src_reg.build_load(bld)
+        )
+        # TODO: update SR register
 
 
 class MULC(Instruction):

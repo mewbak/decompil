@@ -113,6 +113,11 @@ class Register(decompil.ir.Register):
         self.type = context.create_int_type(width)
         self.name = name
         self.components = components
+        self.registers = (
+            [reg for reg, _ in components]
+            if components else
+            None
+        )
 
     def build_load(self, builder):
         if self.components is None:
