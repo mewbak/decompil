@@ -266,7 +266,7 @@ opcodes_ext = [
 ["SN",0x0024,0x00e4,1,2,[[OpType.PRG,1,0,0,0x0003],[OpType.REG1C,1,0,3,0x0018]],False,False],
 # ["L",0x0040,0x00c4,1,2,[[OpType.REG18,1,0,3,0x0038],[OpType.PRG,1,0,0,0x0003]],False,False],
 ["LN",0x0044,0x00c4,1,2,[[OpType.REG18,1,0,3,0x0038],[OpType.PRG,1,0,0,0x0003]],False,False],
-["LS",0x0080,0x00ce,1,2,[[OpType.REG18,1,0,4,0x0030],[OpType.ACCM,1,0,0,0x0001]],False,False],
+#["LS",0x0080,0x00ce,1,2,[[OpType.REG18,1,0,4,0x0030],[OpType.ACCM,1,0,0,0x0001]],False,False],
 ["SL",0x0082,0x00ce,1,2,[[OpType.ACCM,1,0,0,0x0001],[OpType.REG18,1,0,4,0x0030]],False,False],
 ["LSN",0x0084,0x00ce,1,2,[[OpType.REG18,1,0,4,0x0030],[OpType.ACCM,1,0,0,0x0001]],False,False],
 ["SLN",0x0086,0x00ce,1,2,[[OpType.ACCM,1,0,0,0x0001],[OpType.REG18,1,0,4,0x0030]],False,False],
@@ -709,6 +709,34 @@ class Ext_L(InstructionExtension):
 
         build_store_maybe_extend_acc(ctx, disas, bld, dest_reg, load_val)
         build_increment_addr_reg(ctx, disas, bld, src_reg)
+
+
+class Ext_LS(InstructionExtension):
+    name            = 'LS'
+    opcode          = 0x0080
+    opcode_mask     = 0x00ce
+    operands_format = [
+        Reg(Reg.REG18, 0x0030, 4),
+        Reg(Reg.ACM,   0x0001, 0),
+    ]
+
+    def decode(self, ctx, disas, bld):
+        dest_reg, src_reg = self.decode_operands(ctx)
+        ar0 = ctx.registers[0x00]
+        ar3 = ctx.registers[0x03]
+
+        bld.build_store(
+            bld.build_bitcast(ctx.pointer_type, ar3.build_load(bld)),
+            build_load_maybe_extend_acc(ctx, disas, bld, src_reg)
+        )
+        bld.build_rstore(
+            dest_reg,
+            bld.build_load(
+                bld.build_bitcast(ctx.pointer_type, ar0.build_load(bld))
+            )
+        )
+        build_increment_addr_reg(ctx, disas, bld, ar0)
+        build_increment_addr_reg(ctx, disas, bld, ar3)
 
 
 class Ext_S(InstructionExtension):
