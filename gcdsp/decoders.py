@@ -153,7 +153,7 @@ opcodes = [
 #["LRI",0x0080,0xffe0,2,2,[[OpType.REG,1,0,0,0x001f],[OpType.IMM,2,1,0,0xffff]],False,False],
 ["LR",0x00c0,0xffe0,2,2,[[OpType.REG,1,0,0,0x001f],[OpType.MEM,2,1,0,0xffff]],False,False],
 ["SR",0x00e0,0xffe0,2,2,[[OpType.MEM,2,1,0,0xffff],[OpType.REG,1,0,0,0x001f]],False,False],
-["MRR",0x1c00,0xfc00,1,2,[[OpType.REG,1,0,5,0x03e0],[OpType.REG,1,0,0,0x001f]],False,False],
+#["MRR",0x1c00,0xfc00,1,2,[[OpType.REG,1,0,5,0x03e0],[OpType.REG,1,0,0,0x001f]],False,False],
 ["SI",0x1600,0xff00,2,2,[[OpType.MEM,1,0,0,0x00ff],[OpType.IMM,2,1,0,0xffff]],False,False],
 ["ADDIS",0x0400,0xfe00,1,2,[[OpType.ACCM,1,0,8,0x0100],[OpType.IMM,1,0,0,0x00ff]],False,False],
 ["CMPIS",0x0600,0xfe00,1,2,[[OpType.ACCM,1,0,8,0x0100],[OpType.IMM,1,0,0,0x00ff]],False,False],
@@ -607,6 +607,22 @@ class MOVR(Instruction):
             dest_reg, src_reg.build_load(bld)
         )
         # TODO: update SR register
+
+
+class MRR(Instruction):
+    name            = 'MRR'
+    opcode          = 0x1c00
+    opcode_mask     = 0xfc00
+    operands_format = [
+        Reg(Reg.ALL, 0x03e0, 5),
+        Reg(Reg.ALL, 0x001f, 0),
+    ]
+
+    def decode(self, ctx, disas, bld):
+        dest_reg, src_reg = self.decode_operands(ctx)
+
+        src_val = src_reg.build_load(bld)
+        build_store_maybe_extend_acc(ctx, disas, bld, dest_reg, src_val)
 
 
 class MULC(Instruction):
