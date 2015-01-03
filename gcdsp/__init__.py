@@ -82,6 +82,12 @@ class Context(decompil.ir.Context):
             self.registers[0x02]: self.wr_registers[0x02],
             self.registers[0x03]: self.wr_registers[0x03],
         }
+        self.addr_to_ix = {
+            self.registers[0x00]: self.registers[0x04],
+            self.registers[0x01]: self.registers[0x05],
+            self.registers[0x02]: self.registers[0x06],
+            self.registers[0x03]: self.registers[0x07],
+        }
 
         self.long_accumulators = [
             Register(self, 'ac0', 40, [

@@ -265,7 +265,7 @@ opcodes_ext = [
 #["S",0x0020,0x00e4,1,2,[[OpType.PRG,1,0,0,0x0003],[OpType.REG1C,1,0,3,0x0018]],False,False],
 ["SN",0x0024,0x00e4,1,2,[[OpType.PRG,1,0,0,0x0003],[OpType.REG1C,1,0,3,0x0018]],False,False],
 # ["L",0x0040,0x00c4,1,2,[[OpType.REG18,1,0,3,0x0038],[OpType.PRG,1,0,0,0x0003]],False,False],
-["LN",0x0044,0x00c4,1,2,[[OpType.REG18,1,0,3,0x0038],[OpType.PRG,1,0,0,0x0003]],False,False],
+#["LN",0x0044,0x00c4,1,2,[[OpType.REG18,1,0,3,0x0038],[OpType.PRG,1,0,0,0x0003]],False,False],
 #["LS",0x0080,0x00ce,1,2,[[OpType.REG18,1,0,4,0x0030],[OpType.ACCM,1,0,0,0x0001]],False,False],
 ["SL",0x0082,0x00ce,1,2,[[OpType.ACCM,1,0,0,0x0001],[OpType.REG18,1,0,4,0x0030]],False,False],
 ["LSN",0x0084,0x00ce,1,2,[[OpType.REG18,1,0,4,0x0030],[OpType.ACCM,1,0,0,0x0001]],False,False],
@@ -377,39 +377,88 @@ def build_sr_set(ctx, disas, bld, bit_no, clear):
     sr_reg.build_store(bld, sr_val)
 
 
-def build_increment_addr_reg(ctx, disas, bld, addr_reg):
-    """Increment an address register, handling circular buffers."""
+def build_increase_addr_reg(ctx, disas, bld, addr_reg, idx_reg=None):
+    """
+    Increase an address register, handling circular buffers.
+
+    If `idx_reg` is None, `addr_reg` is increment. Otherwise, the value of the
+    register `idx_reg` is used as the increase amount.
+    """
     bb_start = bld.current_basic_block
-    bb_decrement = bld.create_basic_block()
-    bb_end = bld.create_basic_block()
-    one = addr_reg.type.create(1)
+    if idx_reg:
+        bb_overflow = bld.create_basic_block()
+        bb_underflow = bld.create_basic_block()
+        bb_next = bld.create_basic_block()
+
+    half_type = ctx.half_type
 
     # First, compute the candidate next address.
     wr_reg = ctx.addr_to_wr[addr_reg]
     addr_reg_val = addr_reg.build_load(bld)
-    next_addr = bld.build_add(addr_reg_val, one)
+    one = half_type.create(1)
+    incr_val = one if idx_reg is None else idx_reg.build_load(bld)
+    next_addr = bld.build_add(addr_reg_val, incr_val)
     wr_reg_val = wr_reg.build_load(bld)
 
-    # If it crossed the buffer boundary...
-    crossed = bld.build_ugt(
-        bld.build_xor(addr_reg_val, next_addr),
-        bld.build_lshl(bld.build_or(wr_reg_val, one), one)
-    )
-    bld.build_branch(crossed, bb_decrement, bb_end)
+    mx_val = bld.build_lshl(bld.build_or(wr_reg_val, one), one)
+    # Keep the simple incrementation case separate so that it can generate
+    # simpler code. TODO: understand exactly why the simple case is not the
+    # same as the complex one with constant folding...
+    if idx_reg:
+        dar_val = bld.build_and(
+            bld.build_xor(bld.build_xor(next_addr, addr_reg_val), incr_val),
+            mx_val
+        )
+        bld.build_branch(
+            bld.build_sge(incr_val, half_type.create(0)),
+            bb_overflow, bb_underflow,
+        )
 
-    # ... then get it back to the previous boundary.
-    bld.position_at_end(bb_decrement)
-    previous_addr = bld.build_sub(
-        bld.build_sub(next_addr, wr_reg_val), one
-    )
-    bld.build_jump(bb_end)
+        # Handle possible overflow on the buffer boundary.
+        bld.position_at_end(bb_overflow)
+        has_overflowed = bld.build_ugt(dar_val, wr_reg_val)
+        overflow_val = bld.build_select(
+            has_overflowed,
+            bld.build_sub(next_addr, bld.build_add(wr_reg_val, one)),
+            next_addr
+        )
+        bld.build_jump(bb_next)
 
-    # Finally, store the result back in the source register.
-    bld.position_at_end(bb_end)
-    new_addr = bld.build_phi([
-        (bb_start, next_addr),
-        (bb_decrement, previous_addr),
-    ])
+        # Handle possible underflow on the buffer boundary.
+        bld.position_at_end(bb_underflow)
+        has_underflowed = bld.build_ule(
+            bld.build_and(
+                bld.build_xor(
+                    bld.build_add(bld.build_add(next_addr, wr_reg_val), one),
+                    next_addr
+                ),
+                dar_val
+            ),
+            wr_reg_val
+        )
+        underflow_val = bld.build_select(
+            has_underflowed,
+            bld.build_add(next_addr, bld.build_add(wr_reg_val, one)),
+            next_addr
+        )
+        bld.build_jump(bb_next)
+
+        # Finally, store the result back in the source register.
+        bld.position_at_end(bb_next)
+        new_addr = bld.build_phi([
+            (bb_overflow, overflow_val),
+            (bb_underflow, underflow_val),
+        ])
+    else:
+        has_overflowed = bld.build_ugt(
+            bld.build_xor(next_addr, addr_reg_val),
+            mx_val
+        )
+        new_addr = bld.build_select(
+            has_overflowed,
+            bld.build_sub(next_addr, bld.build_add(wr_reg_val, one)),
+            next_addr
+        )
     addr_reg.build_store(bld, new_addr)
 
 
@@ -954,7 +1003,7 @@ class LRRI(Instruction):
         load_val    = bld.build_load(load_addr)
 
         build_store_maybe_extend_acc(ctx, disas, bld, dest_reg, load_val)
-        build_increment_addr_reg(ctx, disas, bld, src_reg)
+        build_increase_addr_reg(ctx, disas, bld, src_reg)
 
 
 class SRRI(Instruction):
@@ -975,7 +1024,7 @@ class SRRI(Instruction):
             addr_reg.build_load(bld)
         )
         bld.build_store(addr_value, src_value)
-        build_increment_addr_reg(ctx, disas, bld, addr_reg)
+        build_increase_addr_reg(ctx, disas, bld, addr_reg)
 
 
 class RET(Instruction):
@@ -1036,7 +1085,31 @@ class Ext_L(InstructionExtension):
         load_val    = bld.build_load(load_addr)
 
         build_store_maybe_extend_acc(ctx, disas, bld, dest_reg, load_val)
-        build_increment_addr_reg(ctx, disas, bld, src_reg)
+        build_increase_addr_reg(ctx, disas, bld, src_reg)
+
+
+class Ext_LN(InstructionExtension):
+    name            = 'LN'
+    opcode          = 0x0044
+    opcode_mask     = 0x00c4
+    operands_format = [
+        Reg(Reg.REG18_4, 0x0038, 3),
+        Reg(Reg.ADDR,    0x0003, 0),
+    ]
+
+    def decode(self, ctx, disas, bld):
+        dest_reg, src_reg = self.decode_operands(ctx)
+
+        load_addr = bld.build_bitcast(
+            ctx.pointer_type,
+            src_reg.build_load(bld)
+        )
+        load_val = bld.build_load(load_addr)
+        build_store_maybe_extend_acc(ctx, disas, bld, dest_reg, load_val)
+        build_increase_addr_reg(
+            ctx, disas, bld,
+            src_reg, ctx.addr_to_ix[src_reg]
+        )
 
 
 class Ext_LS(InstructionExtension):
@@ -1063,8 +1136,8 @@ class Ext_LS(InstructionExtension):
                 bld.build_bitcast(ctx.pointer_type, ar0.build_load(bld))
             )
         )
-        build_increment_addr_reg(ctx, disas, bld, ar0)
-        build_increment_addr_reg(ctx, disas, bld, ar3)
+        build_increase_addr_reg(ctx, disas, bld, ar0)
+        build_increase_addr_reg(ctx, disas, bld, ar3)
 
 
 class Ext_S(InstructionExtension):
@@ -1085,7 +1158,7 @@ class Ext_S(InstructionExtension):
             addr_reg.build_load(bld)
         )
         bld.build_store(addr_value, src_value)
-        build_increment_addr_reg(ctx, disas, bld, addr_reg)
+        build_increase_addr_reg(ctx, disas, bld, addr_reg)
 
 
 class Ext_XXX(InstructionExtension):
