@@ -129,7 +129,7 @@ class Register(decompil.ir.Register):
                     self.type, builder.build_rload(reg)
                 )
                 if shift:
-                    val = builder.build_shl(val, self.type.create(shift))
+                    val = builder.build_lshl(val, self.type.create(shift))
 
                 if result:
                     result = builder.build_add(result, val)
