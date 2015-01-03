@@ -77,7 +77,7 @@ class MergeBasicBlockSequences(optimizations.Optimization):
 
             # While moving instructions to the first basic block, keep them in
             # the same order as in the sequence.
-            for bb in reversed(sequence):
+            for bb in sequence:
                 for insn in bb:
                     first_bb.insert(len(first_bb), insn)
                 self.to_remove.add(bb.index)

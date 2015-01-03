@@ -87,6 +87,9 @@ class Function:
     def __getitem__(self, idx):
         return self.basic_blocks.__getitem__(idx)
 
+    def __len__(self):
+        return len(self.basic_blocks)
+
     @property
     def entry(self):
         return self.basic_blocks[0]
