@@ -242,7 +242,7 @@ opcodes = [
 ["MULCMVZ",0xc200,0xe600,1,3,[[OpType.ACCM,1,0,12,0x1000],[OpType.REG1A,1,0,11,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 ["MULCAC",0xc400,0xe600,1,3,[[OpType.ACCM,1,0,12,0x1000],[OpType.REG1A,1,0,11,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 #["MULCMV",0xc600,0xe600,1,3,[[OpType.ACCM,1,0,12,0x1000],[OpType.REG1A,1,0,11,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
-["MADDX",0xe000,0xfc00,1,2,[[OpType.REGM18,1,0,8,0x0200],[OpType.REGM19,1,0,7,0x0100]],True,False],
+#["MADDX",0xe000,0xfc00,1,2,[[OpType.REGM18,1,0,8,0x0200],[OpType.REGM19,1,0,7,0x0100]],True,False],
 ["MSUBX",0xe400,0xfc00,1,2,[[OpType.REGM18,1,0,8,0x0200],[OpType.REGM19,1,0,7,0x0100]],True,False],
 ["MADDC",0xe800,0xfc00,1,2,[[OpType.ACCM,1,0,9,0x0200],[OpType.REG19,1,0,7,0x0100]],True,False],
 ["MSUBC",0xec00,0xfc00,1,2,[[OpType.ACCM,1,0,9,0x0200],[OpType.REG19,1,0,7,0x0100]],True,False],
@@ -677,6 +677,38 @@ def build_store_prod(ctx, disas, bld, value):
     prod_m2.build_store(bld, prod_m2.type.create(0))
 
 
+def build_load_prod(ctx, disas, bld):
+    """
+    Build and return instructions to compute PROD register as a 48-bit value.
+    """
+    prod_m2_val, prod_high_val, prod_m1_val, prod_low_val = (
+        ctx.prod_register.build_load_comp(bld)
+    )
+
+    prod_type = ctx.create_int_type(48)
+    # Add prod.h.
+    prod_val = bld.build_lshl(
+        bld.build_sext(prod_type,
+            bld.build_trunc(ctx.byte_type, prod_high_val)
+        ),
+        prod_type.create(32)
+    )
+    # Add prod.m1 and prod.m2.
+    prod_val = bld.build_add(prod_val,
+        bld.build_lshl(
+            bld.build_add(
+                bld.build_sext(prod_type, prod_m1_val),
+                bld.build_sext(prod_type, prod_m2_val),
+            ),
+            prod_type.create(16)
+        )
+    )
+    # Add prod.l.
+    return bld.build_add(prod_val,
+        bld.build_sext(prod_type, prod_low_val)
+    )
+
+
 class CLR15(Instruction):
     name            = 'CLR15'
     opcode          = 0x8c00
@@ -707,6 +739,31 @@ class M0(Instruction):
         build_sr_set(ctx, disas, bld, SR_BIT_MUL, False)
 
 
+class MADDX(Instruction):
+    name            = 'MADDX'
+    opcode          = 0xe000
+    opcode_mask     = 0xfc00
+    operands_format = [
+        Reg(Reg.REG18_2, 0x0200, 9),
+        Reg(Reg.REG19_2, 0x0100, 8),
+    ]
+    is_extended = True
+
+    def decode(self, ctx, disas, bld):
+        s_reg, t_reg = self.decode_operands(ctx)
+
+        prod_val = bld.build_zext(
+            ctx.double_type,
+            build_load_prod(ctx, disas, bld)
+        )
+        mul_val = build_multiply_mulx(ctx, disas, bld, s_reg, t_reg)
+
+        build_store_prod(
+            ctx, disas, bld,
+            bld.build_add(prod_val, mul_val)
+        )
+
+
 class MOVP(Instruction):
     name            = 'MOVP'
     opcode          = 0x6e00
@@ -719,48 +776,20 @@ class MOVP(Instruction):
     def decode(self, ctx, disas, bld):
         acc_reg, = self.decode_operands(ctx)
 
-        prod_m2_val, prod_high_val, prod_m1_val, prod_low_val = (
-            ctx.prod_register.build_load_comp(bld)
-        )
-
-        prod_type = ctx.create_int_type(48)
-        # Add prod.h.
-        prod_val = bld.build_lshl(
-            bld.build_sext(prod_type,
-                bld.build_trunc(ctx.byte_type, prod_high_val)
-            ),
-            prod_type.create(32)
-        )
-        # Add prod.m1 and prod.m2.
-        prod_val = bld.build_add(prod_val,
-            bld.build_lshl(
-                bld.build_add(
-                    bld.build_sext(prod_type, prod_m1_val),
-                    bld.build_sext(prod_type, prod_m2_val),
-                ),
-                prod_type.create(16)
-            )
-        )
-        # Add prod.l.
-        prod_val = bld.build_add(prod_val,
-            bld.build_sext(prod_type, prod_low_val)
-        )
-
+        prod_val = build_load_prod(ctx, disas, bld)
         acc_reg.build_store_comp(bld,
-            # prod.m2
-            prod_m2_val.type.create(0),
             # prod.h
             bld.build_trunc(
-                prod_high_val.type,
+                ctx.registers[NO_PRODH].type,
                 bld.build_lshr(prod_val, prod_val.type.create(32))
             ),
             # prod.m1
             bld.build_trunc(
-                prod_m1_val.type,
+                ctx.registers[NO_PRODM1].type,
                 bld.build_lshr(prod_val, prod_val.type.create(16))
             ),
             # prod.l
-            bld.build_trunc(prod_low_val.type, prod_val),
+            bld.build_trunc(ctx.registers[NO_PRODL].type, prod_val),
         )
 
         # TODO: update SR register
