@@ -285,6 +285,23 @@ opcodes_ext = [
 ]
 
 
+(
+    NO_AR0, NO_AR1, NO_AR2, NO_AR3,
+    NO_IX0, NO_IX1, NO_IX2, NO_IX3,
+    NO_R08, NO_R09, NO_R0A, NO_R0B,
+    NO_ST0, NO_ST1, NO_ST2, NO_ST3,
+    NO_AC0H, NO_AC1H,
+    NO_CONFIG, NO_SR,
+    NO_PRODL, NO_PRODM1, NO_PRODH, NO_PRODM2,
+    NO_AX0L, NO_AX1L, NO_AX0H, NO_AX1H,
+    NO_AC0L, NO_AC1L, NO_AC0M, NO_AC1M,
+) = range(32)
+
+
+def get_register_range(context, first, last):
+    return context.registers[first:last + 1]
+
+
 class Reg:
     ALL, ADDR, ACM, AXH, REG18, REG1C, ACCUM = range(7)
 
@@ -295,19 +312,22 @@ class Reg:
         self.invert = invert
 
     def get_reg_class(self, context):
+        def reg_range(first, last):
+            return get_register_range(context, first, last)
+
         if self.reg_class == self.ALL:
             return context.registers
-        elif self.reg_class == self.ADDR:
-            return context.registers[0x00:0x04]
-        elif self.reg_class == self.ACM:
-            return context.registers[0x1e:0x20]
-        elif self.reg_class == self.AXH:
-            return context.registers[0x1a:0x1c]
-        elif self.reg_class == self.REG18:
-            return context.registers[0x18:0x20]
-        elif self.reg_class == self.REG1C:
-            return context.registers[0x1c:0x20]
-        elif self.reg_class == self.ACCUM:
+        if self.reg_class == self.ADDR:
+            return reg_range(NO_AR0,  NO_AR3)
+        if self.reg_class == self.ACM:
+            return reg_range(NO_AC0M, NO_AC1M)
+        if self.reg_class == self.AXH:
+            return reg_range(NO_AX0H, NO_AX1H)
+        if self.reg_class == self.REG18:
+            return reg_range(NO_AX0L, NO_AC1M)
+        if self.reg_class == self.REG1C:
+            return reg_range(NO_AC0L, NO_AC1M)
+        if self.reg_class == self.ACCUM:
             return context.long_accumulators
         else:
             assert False
@@ -324,7 +344,7 @@ SR_BIT_UNSIGNED = 15
 
 def build_sr_test(ctx, disas, bld, bit_no):
     """Return an instruction that computes the `bit_no`nth SR bit."""
-    sr_reg = ctx.registers[0x13]
+    sr_reg = ctx.registers[NO_SR]
     bit_mask = sr_reg.type.create(1 << bit_no)
     return bld.build_ne(
         bld.build_and(sr_reg.build_load(bld), bit_mask),
@@ -336,7 +356,7 @@ def build_sr_set(ctx, disas, bld, bit_no, clear):
     """
     Build instruction that set (0 if `clear`, 1 otherwise) `bit_no`nth SR bit.
     """
-    sr_reg = ctx.registers[0x13]
+    sr_reg = ctx.registers[NO_SR]
     sr_val = sr_reg.build_load(bld)
     bit_mask = sr_reg.type.create(1 << bit_no)
     if clear:
@@ -390,8 +410,7 @@ def match_middle_accumulator(ctx, reg):
     If reg is the middle part of an accumulator register, return the
     corresponding long accumulator.  Return None otherwise.
     """
-    ac0m_reg = ctx.registers[0x1e]
-    ac1m_reg = ctx.registers[0x1f]
+    ac0m_reg, ac1m_reg = get_register_range(ctx, NO_AC0M, NO_AC1M)
     if reg in (ac0m_reg, ac1m_reg):
         return (
             ctx.long_accumulators[0]
@@ -537,7 +556,8 @@ def build_multiply(ctx, disas, bld, left, right):
 
 def build_store_prod(ctx, disas, bld, value):
     assert value.type == ctx.double_type
-    prod_l, prod_m1, prod_h, prod_m2 = ctx.registers[0x14:0x18]
+    prod_l, prod_m1, prod_h, prod_m2 = get_register_range(
+        ctx, NO_PRODL, NO_PRODM2)
 
     prod_l.build_store(bld, bld.build_trunc(ctx.half_type, value))
 
@@ -851,8 +871,8 @@ class Ext_LS(InstructionExtension):
 
     def decode(self, ctx, disas, bld):
         dest_reg, src_reg = self.decode_operands(ctx)
-        ar0 = ctx.registers[0x00]
-        ar3 = ctx.registers[0x03]
+        ar0 = ctx.registers[NO_AR0]
+        ar3 = ctx.registers[NO_AR3]
 
         bld.build_store(
             bld.build_bitcast(ctx.pointer_type, ar3.build_load(bld)),
