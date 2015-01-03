@@ -746,7 +746,7 @@ class MOVP(Instruction):
             bld.build_sext(prod_type, prod_low_val)
         )
 
-        ctx.prod_register.build_store_comp(bld,
+        acc_reg.build_store_comp(bld,
             # prod.m2
             prod_m2_val.type.create(0),
             # prod.h
