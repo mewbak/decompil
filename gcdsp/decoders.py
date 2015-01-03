@@ -231,7 +231,7 @@ opcodes = [
 ["MULMVZ",0x9200,0xf600,1,3,[[OpType.REG18,1,0,11,0x0800],[OpType.REG1A,1,0,11,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 ["MULAC",0x9400,0xf600,1,3,[[OpType.REG18,1,0,11,0x0800],[OpType.REG1A,1,0,11,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 ["MULMV",0x9600,0xf600,1,3,[[OpType.REG18,1,0,11,0x0800],[OpType.REG1A,1,0,11,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
-["MULX",0xa000,0xe700,1,2,[[OpType.REGM18,1,0,11,0x1000],[OpType.REGM19,1,0,10,0x0800]],True,False],
+#["MULX",0xa000,0xe700,1,2,[[OpType.REGM18,1,0,11,0x1000],[OpType.REGM19,1,0,10,0x0800]],True,False],
 ["ABS",0xa100,0xf700,1,1,[[OpType.ACC,1,0,11,0x0800]],True,False],
 ["MULXMVZ",0xa200,0xe600,1,3,[[OpType.REGM18,1,0,11,0x1000],[OpType.REGM19,1,0,10,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 ["MULXAC",0xa400,0xe600,1,3,[[OpType.REGM18,1,0,11,0x1000],[OpType.REGM19,1,0,10,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
@@ -303,7 +303,10 @@ def get_register_range(context, first, last):
 
 
 class Reg:
-    ALL, ADDR, ACM, AXH, REG18, REG1C, ACCUM = range(7)
+    (
+        ALL, ADDR, ACM, AXH, ACCUM,
+        REG18_2, REG19_2, REG18_4, REG1C_4,
+    ) = range(9)
 
     def __init__(self, reg_class, mask, shift, invert=False):
         self.reg_class = reg_class
@@ -323,12 +326,17 @@ class Reg:
             return reg_range(NO_AC0M, NO_AC1M)
         if self.reg_class == self.AXH:
             return reg_range(NO_AX0H, NO_AX1H)
-        if self.reg_class == self.REG18:
-            return reg_range(NO_AX0L, NO_AC1M)
-        if self.reg_class == self.REG1C:
-            return reg_range(NO_AC0L, NO_AC1M)
         if self.reg_class == self.ACCUM:
             return context.long_accumulators
+
+        if self.reg_class == self.REG18_2:
+            return [context.registers[NO_AX0L], context.registers[NO_AX0H]]
+        if self.reg_class == self.REG19_2:
+            return [context.registers[NO_AX1L], context.registers[NO_AX1H]]
+        if self.reg_class == self.REG18_4:
+            return reg_range(NO_AX0L, NO_AC1M)
+        if self.reg_class == self.REG1C_4:
+            return reg_range(NO_AC0L, NO_AC1M)
         else:
             assert False
 
@@ -529,13 +537,78 @@ def build_load_maybe_extend_acc(ctx, disas, bld, reg):
         return value
 
 
-def build_multiply(ctx, disas, bld, left, right):
+# Product modes: determine how to extend input values before computing a
+# product.
+(
+    # Both operands are sign-extended.
+    MUL_SIGNED,
+    # Both operands are zero-extended.
+    MUL_UNSIGNED,
+    # Left operand is zero-extened while right operand is sign-extended.
+    MUL_MIXED,
+) = range(3)
+
+
+def build_multiply(ctx, disas, bld, left, right, mul_mode):
+    """
+    Build and return instructions to compute the product of `left` and `right`.
+
+    `left` and `right` must be 16-bit values; they will be extended to 64-bit
+    ones according to `mul_mode` and to the corresponding SR register bits
+    before the product. Moreover, the result is double if required by the SR
+    register.
+    """
+    assert left.type == ctx.half_type
+    assert right.type == ctx.half_type
+    assert mul_mode in (MUL_SIGNED, MUL_UNSIGNED, MUL_MIXED)
+
     bb_start = bld.current_basic_block
+    bb_prod = bb_start
     bb_double = bld.create_basic_block()
     bb_next = bld.create_basic_block()
 
-    left_ext = bld.build_sext(ctx.double_type, left)
-    right_ext = bld.build_sext(ctx.double_type, right)
+    # First, extend operands as needed.
+    if mul_mode == MUL_SIGNED:
+        left_ext = bld.build_sext(ctx.double_type, left)
+        right_ext = bld.build_sext(ctx.double_type, right)
+    elif mul_mode in (MUL_UNSIGNED, MUL_MIXED):
+        # Sign-extend both unless the SR register allows something else.
+        bb_specific = bld.create_basic_block()
+        bb_sign_extend = bld.create_basic_block()
+        bb_prod = bld.create_basic_block()
+
+        bld.build_branch(
+            build_sr_test(ctx, disas, bld, SR_BIT_UNSIGNED),
+            bb_specific, bb_sign_extend
+        )
+
+        # SR register allows something else!
+        bld.position_at_end(bb_specific)
+        if mul_mode == MUL_UNSIGNED:
+            left_spec = bld.build_zext(ctx.double_type, left)
+            right_spec = bld.build_zext(ctx.double_type, right)
+        else:
+            left_spec = bld.build_zext(ctx.double_type, left)
+            right_spec = bld.build_sext(ctx.double_type, right)
+        bld.build_jump(bb_prod)
+
+        # SR register allows only sign-extension...
+        bld.position_at_end(bb_sign_extend)
+        left_sext = bld.build_sext(ctx.double_type, left)
+        right_sext = bld.build_sext(ctx.double_type, right)
+        bld.build_jump(bb_prod)
+
+        # Collect possible results and move on.
+        bld.position_at_end(bb_prod)
+        left_ext = bld.build_phi([
+            (bb_specific, left_spec),
+            (bb_sign_extend, left_sext),
+        ])
+        right_ext = bld.build_phi([
+            (bb_specific, right_spec),
+            (bb_sign_extend, right_sext),
+        ])
+
     prod_val = bld.build_mul(left_ext, right_ext)
     # If the corresponding SR bit is clear then double each product.
     bld.build_branch(
@@ -549,9 +622,40 @@ def build_multiply(ctx, disas, bld, left, right):
 
     bld.position_at_end(bb_next)
     return bld.build_phi([
-        (bb_start, prod_val),
+        (bb_prod, prod_val),
         (bb_double, double_val),
     ])
+
+
+def build_multiply_mulx(ctx, disas, bld, left_reg, right_reg):
+    """
+    Build and return instructions to compute the product of `left` and `right`
+    as MULX instructions family does.
+    """
+    def match(left_no, right_no):
+        return (
+            left_reg == ctx.registers[left_no]
+            and right_reg == ctx.registers[right_no]
+        )
+
+    left_op, right_op = left_reg, right_reg
+
+    if match(NO_AX0L, NO_AX1L):
+        mul_mode = MUL_UNSIGNED
+    elif match(NO_AX0L, NO_AX1H):
+        mul_mode = MUL_MIXED
+    elif match(NO_AX0H, NO_AX1L):
+        left_op, right_op = right_reg, left_reg
+        mul_mode = MUL_MIXED
+    else:
+        mul_mode = MUL_SIGNED
+
+    return build_multiply(
+        ctx, disas, bld,
+        left_op.build_load(bld),
+        right_op.build_load(bld),
+        mul_mode
+    )
 
 
 def build_store_prod(ctx, disas, bld, value):
@@ -667,8 +771,8 @@ class MOVR(Instruction):
     opcode          = 0x6000
     opcode_mask     = 0xf800
     operands_format = [
-        Reg(Reg.ACCUM, 0x0100, 8),
-        Reg(Reg.REG18, 0x0600, 9),
+        Reg(Reg.ACCUM,   0x0100, 8),
+        Reg(Reg.REG18_4, 0x0600, 9),
     ]
     is_extended     = True
 
@@ -713,7 +817,10 @@ class MULC(Instruction):
 
         acm_val = acm_reg.build_load(bld)
         axh_val = axh_reg.build_load(bld)
-        prod_val = build_multiply(ctx, disas, bld, acm_val, axh_val)
+        prod_val = build_multiply(
+            ctx, disas, bld,
+            acm_val, axh_val, MUL_SIGNED
+        )
         build_store_prod(ctx, disas, bld, prod_val)
 
 
@@ -736,9 +843,30 @@ class MULCMV(Instruction):
         prod_old_values = ctx.prod_register.build_load_comp(bld)
         prod_old_values.pop(0)
 
-        prod_new_val = build_multiply(ctx, disas, bld, acm_val, axh_val)
+        prod_new_val = build_multiply(
+            ctx, disas, bld,
+            acm_val, axh_val, MUL_SIGNED
+        )
         build_store_prod(ctx, disas, bld, prod_new_val)
         accum_reg.build_store_comp(bld, *prod_old_values)
+
+
+class MULX(Instruction):
+    name            = 'MULX'
+    opcode          = 0xa000
+    opcode_mask     = 0xe700
+    operands_format = [
+        Reg(Reg.REG18_2, 0x1000, 12),
+        Reg(Reg.REG19_2, 0x0800, 11),
+    ]
+    is_extended     = True
+
+    def decode(self, ctx, disas, bld):
+        s_reg, t_reg = self.decode_operands(ctx)
+        build_store_prod(
+            ctx, disas, bld,
+            build_multiply_mulx(ctx, disas, bld, s_reg, t_reg)
+        )
 
 
 class LRI(Instruction):
@@ -845,8 +973,8 @@ class Ext_L(InstructionExtension):
     opcode          = 0x0040
     opcode_mask     = 0x00c4
     operands_format = [
-        Reg(Reg.REG18, 0x0038, 3),
-        Reg(Reg.ADDR,  0x0003, 0),
+        Reg(Reg.REG18_4, 0x0038, 3),
+        Reg(Reg.ADDR,    0x0003, 0),
     ]
 
     def decode(self, ctx, disas, bld):
@@ -865,8 +993,8 @@ class Ext_LS(InstructionExtension):
     opcode          = 0x0080
     opcode_mask     = 0x00ce
     operands_format = [
-        Reg(Reg.REG18, 0x0030, 4),
-        Reg(Reg.ACM,   0x0001, 0),
+        Reg(Reg.REG18_4, 0x0030, 4),
+        Reg(Reg.ACM,     0x0001, 0),
     ]
 
     def decode(self, ctx, disas, bld):
@@ -893,8 +1021,8 @@ class Ext_S(InstructionExtension):
     opcode          = 0x0020
     opcode_mask     = 0x00e4
     operands_format = [
-        Reg(Reg.ADDR,  0x0003, 0),
-        Reg(Reg.REG18, 0x0018, 3),
+        Reg(Reg.ADDR,    0x0003, 0),
+        Reg(Reg.REG18_4, 0x0018, 3),
     ]
 
     def decode(self, ctx, disas, bld):
