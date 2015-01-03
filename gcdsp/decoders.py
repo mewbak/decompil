@@ -537,10 +537,10 @@ def build_multiply(ctx, disas, bld, left, right):
     left_ext = bld.build_sext(ctx.double_type, left)
     right_ext = bld.build_sext(ctx.double_type, right)
     prod_val = bld.build_mul(left_ext, right_ext)
-    # If the corresponding SR bit is set then double each product.
+    # If the corresponding SR bit is clear then double each product.
     bld.build_branch(
         build_sr_test(ctx, disas, bld, SR_BIT_MUL),
-        bb_double, bb_next
+        bb_next, bb_double
     )
 
     bld.position_at_end(bb_double)
