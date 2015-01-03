@@ -513,7 +513,7 @@ def build_store_maybe_extend_acc(ctx, disas, bld, reg, value):
 
         # First test if the extension is actually required by the SR register.
         bld.build_branch(
-            build_sr_test(ctx, disas, bld, 14),
+            build_sr_test(ctx, disas, bld, SR_BIT_40_MODE),
             bb_extend, bb_regular
         )
 
@@ -549,7 +549,7 @@ def build_load_maybe_extend_acc(ctx, disas, bld, reg):
 
         # First test if the extension is actually required by the SR register.
         bld.build_branch(
-            build_sr_test(ctx, disas, bld, 14),
+            build_sr_test(ctx, disas, bld, SR_BIT_40_MODE),
             bb_extend, bb_next
         )
 
