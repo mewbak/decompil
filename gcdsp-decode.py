@@ -56,6 +56,10 @@ parser.add_argument(
     '--dot-format', default=None, choices=('png', 'svg', 'pdf'),
     help='If provided, invoke dot to produce the graph output'
 )
+parser.add_argument(
+    '--dpi', default=None, type=int,
+    help='When invoking dot, specifies a DPI for its output'
+)
 
 text_formatter = get_formatter_by_name('text')
 
@@ -81,13 +85,13 @@ def main(args):
         if 'dot' in args.dumps:
             dot_document = function_to_dot(function, style=args.style)
             if args.dot_format:
-                dot = subprocess.Popen(
-                    ['dot',
-                        '-T{}'.format(args.dot_format),
-                        '-o' '{}.{}'.format(name, args.dot_format),
-                    ],
-                    stdin=subprocess.PIPE
-                )
+                dot_args = ['dot',
+                    '-T{}'.format(args.dot_format),
+                    '-o' '{}.{}'.format(name, args.dot_format),
+                ]
+                if args.dpi is not None:
+                    dot_args.append('-Gdpi={}'.format(args.dpi))
+                dot = subprocess.Popen(dot_args, stdin=subprocess.PIPE)
                 dot.communicate(dot_document.encode('utf-8'))
             else:
                 with open('{}.dot'.format(name), 'w') as f:
