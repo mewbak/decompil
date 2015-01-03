@@ -257,7 +257,7 @@ opcodes = [
 
 
 opcodes_ext = [
-["XXX",0x0000,0x00fc,1,1,[[OpType.VAL,1,0,0,0x00ff]],False,False],
+#["XXX",0x0000,0x00fc,1,1,[[OpType.VAL,1,0,0,0x00ff]],False,False],
 ["DR",0x0004,0x00fc,1,1,[[OpType.REG,1,0,0,0x0003]],False,False],
 ["IR",0x0008,0x00fc,1,1,[[OpType.REG,1,0,0,0x0003]],False,False],
 ["NR",0x000c,0x00fc,1,1,[[OpType.REG,1,0,0,0x0003]],False,False],
@@ -907,3 +907,13 @@ class Ext_S(InstructionExtension):
         )
         bld.build_store(addr_value, src_value)
         build_increment_addr_reg(ctx, disas, bld, addr_reg)
+
+
+class Ext_XXX(InstructionExtension):
+    name            = 'XXX'
+    opcode          = 0x0000
+    opcode_mask     = 0x00fc
+    operands_format = []
+
+    def decode(self, ctx, disas, bld):
+        pass
