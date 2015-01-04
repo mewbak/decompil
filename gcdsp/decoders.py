@@ -233,7 +233,7 @@ opcodes = [
 ["MULMV",0x9600,0xf600,1,3,[[OpType.REG18,1,0,11,0x0800],[OpType.REG1A,1,0,11,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 #["MULX",0xa000,0xe700,1,2,[[OpType.REGM18,1,0,11,0x1000],[OpType.REGM19,1,0,10,0x0800]],True,False],
 ["ABS",0xa100,0xf700,1,1,[[OpType.ACC,1,0,11,0x0800]],True,False],
-["MULXMVZ",0xa200,0xe600,1,3,[[OpType.REGM18,1,0,11,0x1000],[OpType.REGM19,1,0,10,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
+#["MULXMVZ",0xa200,0xe600,1,3,[[OpType.REGM18,1,0,11,0x1000],[OpType.REGM19,1,0,10,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 ["MULXAC",0xa400,0xe600,1,3,[[OpType.REGM18,1,0,11,0x1000],[OpType.REGM19,1,0,10,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 ["MULXMV",0xa600,0xe600,1,3,[[OpType.REGM18,1,0,11,0x1000],[OpType.REGM19,1,0,10,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 ["TST",0xb100,0xf700,1,1,[[OpType.ACC,1,0,11,0x0800]],True,False],
@@ -776,9 +776,11 @@ def build_store_prod(ctx, disas, bld, value):
     prod_m2.build_store(bld, prod_m2.type.create(0))
 
 
-def build_load_prod(ctx, disas, bld):
+def build_load_prod(ctx, disas, bld, round_low=False):
     """
     Build and return instructions to compute PROD register as a 48-bit value.
+
+    If `round_low`, round the low part of PROD before.
     """
     prod_m2_val, prod_high_val, prod_m1_val, prod_low_val = (
         ctx.prod_register.build_load_comp(bld)
@@ -803,9 +805,24 @@ def build_load_prod(ctx, disas, bld):
         )
     )
     # Add prod.l.
-    return bld.build_add(prod_val,
+    result = bld.build_add(prod_val,
         bld.build_sext(prod_type, prod_low_val)
     )
+
+    if round_low:
+        complement = bld.build_select(
+            bld.build_ne(
+                bld.build_and(result, result.type.create(0x10000)),
+                result.type.create(0)
+            ),
+            result.type.create(0x8000),
+            result.type.create(0x7fff),
+        )
+        result = bld.build_and(
+            bld.build_add(result, complement),
+            result.type.create(0x00000000ffff)
+        )
+    return result
 
 
 class CLR15(Instruction):
@@ -1030,6 +1047,40 @@ class MULX(Instruction):
             ctx, disas, bld,
             build_multiply_mulx(ctx, disas, bld, s_reg, t_reg)
         )
+
+
+class MULXMVZ(Instruction):
+    name            = 'MULXMVZ'
+    opcode          = 0xa200
+    opcode_mask     = 0xe600
+    operands_format = [
+        Reg(Reg.REG18_2, 0x1000, 12),
+        Reg(Reg.REG19_2, 0x0800, 11),
+        Reg(Reg.ACCUM,   0x0100, 8),
+    ]
+    is_extended     = True
+
+    def decode(self, ctx, disas, bld):
+        src_reg, t_reg, r_reg = self.decode_operands(ctx)
+
+        prod = build_load_prod(ctx, disas, bld, round_low=True)
+        acc_high, acc_mid, acc_low = r_reg.registers
+        acc_low.build_store(bld, bld.build_trunc(acc_low.type, prod))
+        acc_mid.build_store(bld, bld.build_trunc(acc_mid.type,
+            bld.build_lshr(prod, prod.type.create(16))
+        ))
+        acc_high.build_store(bld, bld.build_sext(acc_high.type,
+            bld.build_trunc(
+                ctx.byte_type,
+                bld.build_lshr(prod, prod.type.create(32))
+            )
+        ))
+
+        build_store_prod(
+            ctx, disas, bld,
+            build_multiply_mulx(ctx, disas, bld, src_reg, t_reg)
+        )
+        # TODO: update SR register
 
 
 class LRI(Instruction):
