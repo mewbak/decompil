@@ -280,7 +280,7 @@ opcodes_ext = [
 ["LDAXNM",0x00cf,0x00cf,1,2,[[OpType.AX,1,0,4,0x0010],[OpType.PRG,1,0,5,0x0020]],False,False],
 ["LD",0x00c0,0x00cc,1,3,[[OpType.REGM18,1,0,4,0x0020],[OpType.REGM19,1,0,3,0x0010],[OpType.PRG,1,0,0,0x0003]],False,False],
 ["LDN",0x00c4,0x00cc,1,3,[[OpType.REGM18,1,0,4,0x0020],[OpType.REGM19,1,0,3,0x0010],[OpType.PRG,1,0,0,0x0003]],False,False],
-["LDM",0x00c8,0x00cc,1,3,[[OpType.REGM18,1,0,4,0x0020],[OpType.REGM19,1,0,3,0x0010],[OpType.PRG,1,0,0,0x0003]],False,False],
+#["LDM",0x00c8,0x00cc,1,3,[[OpType.REGM18,1,0,4,0x0020],[OpType.REGM19,1,0,3,0x0010],[OpType.PRG,1,0,0,0x0003]],False,False],
 ["LDNM",0x00cc,0x00cc,1,3,[[OpType.REGM18,1,0,4,0x0020],[OpType.REGM19,1,0,3,0x0010],[OpType.PRG,1,0,0,0x0003]],False,False]
 ]
 
@@ -375,6 +375,18 @@ def build_sr_set(ctx, disas, bld, bit_no, clear):
     else:
         sr_val = bld.build_or(sr_val, bit_mask)
     sr_reg.build_store(bld, sr_val)
+
+
+def build_same_memory_area_test(ctx, disas, bld, addr1, addr2):
+    """
+    Build and return instructions that compute whether `addr1` and `addr2` are
+    two integer values representing addresses that point to the same memory
+    area.
+    """
+    return bld.build_eq(
+        bld.build_lshr(addr1, addr1.type.create(10)),
+        bld.build_lshr(addr2, addr2.type.create(10)),
+    )
 
 
 def build_increase_addr_reg(ctx, disas, bld, addr_reg, idx_reg=None):
@@ -1137,6 +1149,39 @@ class Ext_L(InstructionExtension):
 
         build_store_maybe_extend_acc(ctx, disas, bld, dest_reg, load_val)
         build_increase_addr_reg(ctx, disas, bld, src_reg)
+
+
+class Ext_LDM(InstructionExtension):
+    name            = 'LDM'
+    opcode          = 0x00c8
+    opcode_mask     = 0x00cc
+    operands_format = [
+        Reg(Reg.REG18_2, 0x0020, 5),
+        Reg(Reg.REG19_2, 0x0010, 4),
+        Reg(Reg.ADDR,    0x0003, 0),
+    ]
+
+    def decode(self, ctx, disas, bld):
+        dest_reg, r_reg, src_reg = self.decode_operands(ctx)
+
+        addr_input = src_reg.build_load(bld)
+        load_addr = bld.build_bitcast(ctx.pointer_type, addr_input)
+        dest_reg.build_store(bld, bld.build_load(load_addr))
+
+        addr_3 = ctx.registers[NO_AR3].build_load(bld)
+        addr_selected = bld.build_select(
+            build_same_memory_area_test(ctx, disas, bld, addr_input, addr_3),
+            addr_input, addr_3
+        )
+        load_addr = bld.build_bitcast(ctx.pointer_type, addr_selected)
+        r_reg.build_store(bld, bld.build_load(load_addr))
+
+        build_increase_addr_reg(ctx, disas, bld, src_reg)
+        build_increase_addr_reg(
+            ctx, disas, bld,
+            ctx.registers[NO_AR3],
+            ctx.registers[NO_IX3]
+        )
 
 
 class Ext_LN(InstructionExtension):
