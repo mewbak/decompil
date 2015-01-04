@@ -243,9 +243,9 @@ opcodes = [
 ["MULCAC",0xc400,0xe600,1,3,[[OpType.ACCM,1,0,12,0x1000],[OpType.REG1A,1,0,11,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 #["MULCMV",0xc600,0xe600,1,3,[[OpType.ACCM,1,0,12,0x1000],[OpType.REG1A,1,0,11,0x0800],[OpType.ACC,1,0,8,0x0100]],True,False],
 #["MADDX",0xe000,0xfc00,1,2,[[OpType.REGM18,1,0,8,0x0200],[OpType.REGM19,1,0,7,0x0100]],True,False],
-["MSUBX",0xe400,0xfc00,1,2,[[OpType.REGM18,1,0,8,0x0200],[OpType.REGM19,1,0,7,0x0100]],True,False],
+#["MSUBX",0xe400,0xfc00,1,2,[[OpType.REGM18,1,0,8,0x0200],[OpType.REGM19,1,0,7,0x0100]],True,False],
 #["MADDC",0xe800,0xfc00,1,2,[[OpType.ACCM,1,0,9,0x0200],[OpType.REG19,1,0,7,0x0100]],True,False],
-["MSUBC",0xec00,0xfc00,1,2,[[OpType.ACCM,1,0,9,0x0200],[OpType.REG19,1,0,7,0x0100]],True,False],
+#["MSUBC",0xec00,0xfc00,1,2,[[OpType.ACCM,1,0,9,0x0200],[OpType.REG19,1,0,7,0x0100]],True,False],
 ["LSL16",0xf000,0xfe00,1,1,[[OpType.ACC,1,0,8,0x0100]],True,False],
 ["MADD",0xf200,0xfe00,1,2,[[OpType.REG18,1,0,8,0x0100],[OpType.REG1A,1,0,8,0x0100]],True,False],
 ["LSR16",0xf400,0xfe00,1,1,[[OpType.ACC,1,0,8,0x0100]],True,False],
@@ -726,6 +726,25 @@ def build_multiply_add(ctx, disas, bld, left_reg, right_reg):
     )
 
 
+def build_multiply_sub(ctx, disas, bld, left_reg, right_reg):
+    """
+    Build instructions to compute and store the product + difference of `left`,
+    `right` and the PROD register as MSUB instructions family does.
+    """
+    prod_val = bld.build_zext(
+        ctx.double_type,
+        build_load_prod(ctx, disas, bld)
+    )
+    left_val = left_reg.build_load(bld)
+    right_val = right_reg.build_load(bld)
+    mul_val = build_multiply(ctx, disas, bld, left_val, right_val, MUL_SIGNED)
+
+    build_store_prod(
+        ctx, disas, bld,
+        bld.build_sub(mul_val, prod_val)
+    )
+
+
 def build_store_prod(ctx, disas, bld, value):
     assert value.type == ctx.double_type
     prod_l, prod_m1, prod_h, prod_m2 = get_register_range(
@@ -902,6 +921,36 @@ class MRR(Instruction):
 
         src_val = src_reg.build_load(bld)
         build_store_maybe_extend_acc(ctx, disas, bld, dest_reg, src_val)
+
+
+class MSUBC(Instruction):
+    name            = 'MSUBC'
+    opcode          = 0xec00
+    opcode_mask     = 0xfc00
+    operands_format = [
+        Reg(Reg.ACM, 0x0200, 9),
+        Reg(Reg.AXH, 0x0100, 8),
+    ]
+    is_extended = True
+
+    def decode(self, ctx, disas, bld):
+        s_reg, t_reg = self.decode_operands(ctx)
+        build_multiply_sub(ctx, disas, bld, s_reg, t_reg)
+
+
+class MSUBX(Instruction):
+    name            = 'MSUBX'
+    opcode          = 0xe400
+    opcode_mask     = 0xfc00
+    operands_format = [
+        Reg(Reg.REG18_2, 0x0200, 9),
+        Reg(Reg.REG19_2, 0x0100, 8),
+    ]
+    is_extended = True
+
+    def decode(self, ctx, disas, bld):
+        s_reg, t_reg = self.decode_operands(ctx)
+        build_multiply_sub(ctx, disas, bld, s_reg, t_reg)
 
 
 class MULC(Instruction):
