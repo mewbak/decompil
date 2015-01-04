@@ -716,7 +716,9 @@ def build_multiply_add(ctx, disas, bld, left_reg, right_reg):
         ctx.double_type,
         build_load_prod(ctx, disas, bld)
     )
-    mul_val = build_multiply_mulx(ctx, disas, bld, left_reg, right_reg)
+    left_val = left_reg.build_load(bld)
+    right_val = right_reg.build_load(bld)
+    mul_val = build_multiply(ctx, disas, bld, left_val, right_val, MUL_SIGNED)
 
     build_store_prod(
         ctx, disas, bld,
