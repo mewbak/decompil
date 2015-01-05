@@ -180,7 +180,7 @@ opcodes = [
 ["SRR",0x1a00,0xff80,1,2,[[OpType.PRG,1,0,5,0x0060],[OpType.REG,1,0,0,0x001f]],False,False],
 ["SRRD",0x1a80,0xff80,1,2,[[OpType.PRG,1,0,5,0x0060],[OpType.REG,1,0,0,0x001f]],False,False],
 # ["SRRI",0x1b00,0xff80,1,2,[[OpType.PRG,1,0,5,0x0060],[OpType.REG,1,0,0,0x001f]],False,False],
-["SRRN",0x1b80,0xff80,1,2,[[OpType.PRG,1,0,5,0x0060],[OpType.REG,1,0,0,0x001f]],False,False],
+#["SRRN",0x1b80,0xff80,1,2,[[OpType.PRG,1,0,5,0x0060],[OpType.REG,1,0,0,0x001f]],False,False],
 ["LRS",0x2000,0xf800,1,2,[[OpType.REG18,1,0,8,0x0700],[OpType.MEM,1,0,0,0x00ff]],False,False],
 ["SRS",0x2800,0xf800,1,2,[[OpType.MEM,1,0,0,0x00ff],[OpType.REG18,1,0,8,0x0700]],False,False],
 ["XORR",0x3000,0xfc80,1,2,[[OpType.ACCM,1,0,8,0x0100],[OpType.REG1A,1,0,9,0x0200]],True,False],
@@ -1180,6 +1180,29 @@ class SET40(Instruction):
 
     def decode(self, ctx, disas, bld):
         build_sr_set(ctx, disas, bld, SR_BIT_40_MODE, False)
+
+
+class SRRN(Instruction):
+    name            = 'SRRN'
+    opcode          = 0x1b80
+    opcode_mask     = 0xff80
+    operands_format = [
+        Reg(Reg.ADDR, 0x0060, 5),
+        Reg(Reg.ALL,  0x001f, 0),
+    ]
+
+    def decode(self, ctx, disas, bld):
+        addr_reg, src_reg = self.decode_operands(ctx)
+
+        store_addr = bld.build_bitcast(
+            ctx.pointer_type, addr_reg.build_load(bld)
+        )
+        store_val = build_load_maybe_extend_acc(ctx, disas, bld, src_reg)
+        bld.build_store(store_addr, store_val)
+        build_increase_addr_reg(
+            ctx, disas, bld,
+            addr_reg, ctx.addr_to_ix[addr_reg]
+        )
 
 
 class Ext_L(InstructionExtension):
