@@ -247,7 +247,7 @@ class IntType(Type):
         assert width > 0
 
     def create(self, i):
-        assert -(2 ** (self.width - 1)) <= i < 2 ** self.width - 1
+        assert -(2 ** (self.width - 1)) <= i < 2 ** self.width
         return Value(self, i)
 
     def __eq__(self, other):
