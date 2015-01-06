@@ -229,6 +229,11 @@ class Type:
     def format(self):
         raise NotImplementedError()
 
+    @property
+    def pointer(self):
+        """Return a type that points to `self`. """
+        return PointerType(self.context, self)
+
 
 class VoidType(Type):
     def __init__(self, context):
@@ -416,8 +421,8 @@ class BaseInstruction:
     # Comparisons (10)
     EQ, NE, SLE, SLT, SGE, SGT, ULE, ULT, UGE, UGT,
 
-    # Memory (2)
-    LOAD, STORE,
+    # Memory (3)
+    LOAD, STORE, ALLOCA,
     # Registers (2)
     RLOAD, RSTORE,
 
@@ -426,7 +431,7 @@ class BaseInstruction:
 
     # Undefined (1)
     UNDEF,
-) = range (5 + 4 + 5 + 1 + 6 + 10 + 2 + 2 + 2 + 1)
+) = range (5 + 4 + 5 + 1 + 6 + 10 + 3 + 2 + 2 + 1)
 
 
 NAMES = {
@@ -469,6 +474,7 @@ NAMES = {
 
     LOAD: 'load',
     STORE: 'store',
+    ALLOCA: 'alloca',
     RLOAD: 'rload',
     RSTORE: 'rstore',
 
@@ -830,6 +836,28 @@ class LoadInstruction(ComputingInstruction):
         result.append((Text, ' '))
         result.extend(self.source.format())
         return result
+
+
+class AllocaInstruction(ComputingInstruction):
+    KINDS = (ALLOCA, )
+
+    def __init__(self, function, stored_type, **kwargs):
+        super(AllocaInstruction, self).__init__(function, ALLOCA, **kwargs)
+        self.stored_type = stored_type
+        self.ptr_type = stored_type.pointer
+
+    @property
+    def type(self):
+        return self.ptr_type
+
+    def map_inputs(self, func):
+        pass
+
+    def format_instruction(self):
+        return [
+            (Operator.Word, NAMES[self.kind]),
+            (Text, ' '),
+        ] + self.stored_type.format()
 
 
 class StoreInstruction(BaseInstruction):

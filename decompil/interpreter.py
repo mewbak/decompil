@@ -58,6 +58,15 @@ class Interpreter:
         # TODO: remove values as they it becomes invalid to used them.
         self.values = {}
 
+        # Mapping: int (pointers) -> LiveValue (pointed values)
+        # TODO: handle a real memory space, with "unaligned" accesses, etc.
+        self.memory = {}
+        # Next address ALLOCA will return. TODO: not sure it is a good idea
+        # since generated numbers may conflict with "statically allocated
+        # storage". Anyway, this interpreter is for testing synthetic
+        # testcases, so maybe we can live with it.
+        self.next_addr = 1
+
         self.last_bb = None
         self.current_bb = function.entry
 
@@ -248,16 +257,39 @@ class Interpreter:
         return LiveValue(insn.type, left > right)
 
     def handle_load(self, insn):
-        raise NotImplementedError()
+        addr_value = self.get_value(insn.source)
+        addr = addr_value.as_unsigned
+
+        # Currently, we handle only ALLOCA'd pointers.
+        assert addr in self.memory
+        slot = self.memory[addr]
+        assert slot.type == addr_value.type.pointed
+
+        return slot
 
     def handle_store(self, insn):
-        raise NotImplementedError()
+        addr_value = self.get_value(insn.destination)
+        addr = addr_value.as_unsigned
+
+        # Currently, we handle only ALLOCA'd pointers.
+        assert (
+            addr in self.memory
+            and self.memory[addr].type == addr_value.type.pointed
+        )
+        self.memory[addr] = LiveValue.from_value(insn.value)
 
     def handle_rload(self, insn):
         return self.registers.get(insn.source, LiveValue(insn.source.type))
 
     def handle_rstore(self, insn):
         self.registers[insn.destination] = self.get_value(insn.value)
+
+    def handle_alloca(self, insn):
+        addr = self.next_addr
+        self.next_addr += 1
+
+        self.memory[addr] = LiveValue(insn.stored_type)
+        return LiveValue(insn.stored_type.pointer, addr)
 
     def handle_select(self, insn):
         cond = self.get_value(insn.condition)
@@ -311,6 +343,7 @@ class Interpreter:
         ir.STORE: handle_store,
         ir.RLOAD: handle_rload,
         ir.RSTORE: handle_rstore,
+        ir.ALLOCA: handle_alloca,
 
         ir.COPY: handle_copy,
 
